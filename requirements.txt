@@ -1,0 +1,9 @@
+streamlit
+numpy
+matplotlib
+scipy
+plotly
+pandas
+networkx
+dataclasses 
+re
