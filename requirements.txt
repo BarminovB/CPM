@@ -1,9 +1,3 @@
-streamlit
-numpy
-matplotlib
-scipy
-plotly
-pandas
-networkx
-dataclasses 
-re
+pandas>=1.3.0
+networkx>=2.6.0
+matplotlib>=3.4.0
