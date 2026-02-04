@@ -920,24 +920,27 @@ def main():
         st.session_state.scheduler = PDMScheduler()
     if 'calculated' not in st.session_state:
         st.session_state.calculated = False
-
+    # Initialize predecessor list if not present
+    if 'pred_list' not in st.session_state:
+        st.session_state.pred_list = []
     scheduler = st.session_state.scheduler
 
     # Sidebar for adding activities
     with st.sidebar:
         st.header("Add Activity")
 
-        with st.form("add_activity_form"):
+        with st.form("add_activity_form", clear_on_submit=False):
             activity_id = st.text_input(
                 "Activity ID",
                 placeholder="e.g., A, B, TASK1",
-                help="Unique identifier (letters, numbers, underscores)"
-            )
+                help="Unique identifier (starts with letter, letters/numbers/underscores)",
+                key="activity_id_input"
+            ).strip().upper()
 
             description = st.text_input(
                 "Description",
                 placeholder="e.g., Design phase",
-                help="Brief description of the activity"
+                key="description_input"
             )
 
             duration = st.number_input(
@@ -945,26 +948,81 @@ def main():
                 min_value=0,
                 value=1,
                 step=1,
-                help="Activity duration in days"
+                key="duration_input"
             )
 
-            predecessors_str = st.text_input(
-                "Predecessors",
-                placeholder="e.g., A:FS:0;B:SS:5",
-                help="Format: ID:TYPE:LAG;... (FS=Finish-Start, SS=Start-Start, FF=Finish-Finish, SF=Start-Finish)"
-            )
+            st.markdown("**Predecessors** (add multiple if needed)")
 
-            submitted = st.form_submit_button("Add Activity", use_container_width=True)
+            # Dynamic predecessor list
+            if 'pred_list' not in st.session_state:
+                st.session_state.pred_list = []
+
+            # Button to add new predecessor row
+            if st.button("➕ Add Predecessor", key="add_pred_btn"):
+                st.session_state.pred_list.append({"pred_id": "", "rel_type": "FS", "lag": 0})
+                st.rerun()
+
+            predecessors = []
+            to_remove = []
+
+            existing_activities = ["(none)"] + sorted([act_id for act_id in scheduler.activities.keys() if act_id != activity_id])
+
+            for idx, pred in enumerate(st.session_state.pred_list):
+                cols = st.columns([3, 2, 2, 1])
+                with cols[0]:
+                    selected_id = st.selectbox(
+                        f"Predecessor #{idx+1}",
+                        options=existing_activities,
+                        index=existing_activities.index(pred["pred_id"]) if pred["pred_id"] in existing_activities else 0,
+                        key=f"pred_id_{idx}"
+                    )
+                with cols[1]:
+                    rel_type = st.selectbox(
+                        "Type",
+                        options=["FS", "SS", "FF", "SF"],
+                        index=["FS", "SS", "FF", "SF"].index(pred.get("rel_type", "FS")),
+                        key=f"rel_type_{idx}"
+                    )
+                with cols[2]:
+                    lag = st.number_input(
+                        "Lag (days)",
+                        value=pred.get("lag", 0),
+                        step=1,
+                        key=f"lag_{idx}"
+                    )
+                with cols[3]:
+                    if st.button("🗑", key=f"remove_pred_{idx}"):
+                        to_remove.append(idx)
+
+                if selected_id != "(none)":
+                    predecessors.append(Relationship(selected_id, rel_type, int(lag)))
+
+            # Remove selected predecessors
+            for idx in sorted(to_remove, reverse=True):
+                del st.session_state.pred_list[idx]
+
+            submitted = st.form_submit_button("Add Activity", type="primary", use_container_width=True)
 
             if submitted:
-                success, message = scheduler.add_activity(
-                    activity_id, description, int(duration), predecessors_str
-                )
-                if success:
-                    st.success(message)
-                    st.session_state.calculated = False
+                if not activity_id:
+                    st.error("Activity ID is required.")
+                elif not re.match(r'^[A-Z][A-Z0-9_]*$', activity_id):
+                    st.error("Invalid Activity ID format.")
                 else:
-                    st.error(message)
+                    pred_str = ";".join(f"{p.predecessor_id}:{p.relation_type}:{p.lag}" for p in predecessors)
+                    success, message = scheduler.add_activity(
+                        activity_id,
+                        description,
+                        duration,
+                        pred_str
+                    )
+                    if success:
+                        st.success(f"Activity **{activity_id}** added successfully with {len(predecessors)} predecessor(s)!")
+                        st.session_state.pred_list = []  # Clear the list
+                        st.session_state.calculated = False
+                        st.rerun()
+                    else:
+                        st.error(message)
 
         st.divider()
 
