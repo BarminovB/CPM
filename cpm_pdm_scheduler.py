@@ -1029,8 +1029,31 @@ def main():
         [data-testid="stMetricLabel"] {
             color: var(--cpm-muted);
         }
+        [data-testid="stSidebar"] {
+            background: linear-gradient(
+                180deg,
+                color-mix(in srgb, var(--cpm-accent) 6%, var(--cpm-surface) 94%),
+                var(--cpm-bg)
+            );
+            border-right: 1px solid var(--cpm-border);
+            box-shadow: inset -1px 0 0 color-mix(in srgb, var(--cpm-accent) 10%, transparent);
+        }
+        [data-testid="stSidebar"] h2,
+        [data-testid="stSidebar"] h3,
+        [data-testid="stSidebar"] h4 {
+            padding: 6px 10px;
+            border-radius: 10px;
+            background: color-mix(in srgb, var(--cpm-accent) 6%, var(--cpm-surface) 94%);
+            border: 1px solid color-mix(in srgb, var(--cpm-border) 65%, transparent);
+        }
+        [data-testid="stSidebar"] hr {
+            border: none;
+            height: 1px;
+            background: color-mix(in srgb, var(--cpm-border) 60%, transparent);
+            margin: 16px 0;
+        }
         [data-testid="stSidebar"] * {
-            color: var(--cpm-sidebar-ink);
+            color: var(--cpm-ink);
         }
         .cpm-hero {
             display: flex;
@@ -1251,10 +1274,10 @@ def main():
         [data-testid="stSidebar"] .stNumberInput input,
         [data-testid="stSidebar"] .stTextArea textarea,
         [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div {
-            background: #1f2430;
-            border-color: #2a3242;
-            color: #f2f2f2;
-            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+            background: var(--cpm-surface);
+            border-color: var(--cpm-border);
+            color: var(--cpm-ink);
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
         }
         </style>
         """
