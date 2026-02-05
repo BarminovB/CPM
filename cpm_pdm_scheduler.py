@@ -1170,10 +1170,10 @@ def main():
             animation: focusTrail 0.4s ease;
             pointer-events: none;
         }
-        @keyframes focusTrail {
-            from { opacity: 0; transform: scale(0.98); }
-            to { opacity: 1; transform: scale(1); }
-        }
+        @keyframes focusTrail {{
+            from {{ opacity: 0; transform: scale(0.98); }}
+            to {{ opacity: 1; transform: scale(1); }}
+        }}
         .stTextInput input,
         .stNumberInput input,
         .stTextArea textarea,
@@ -1221,9 +1221,9 @@ def main():
             background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
             animation: shimmer 1.6s infinite;
         }
-        @keyframes shimmer {
-            100% { transform: translateX(100%); }
-        }
+        @keyframes shimmer {{
+            100% {{ transform: translateX(100%); }}
+        }}
         .cpm-glass {
             background: color-mix(in srgb, var(--cpm-surface) 70%, transparent);
             border-radius: var(--cpm-radius);
@@ -1235,10 +1235,10 @@ def main():
         .cpm-fade-in {
             animation: fadeInUp 0.4s ease;
         }
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(6px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes fadeInUp {{
+            from {{ opacity: 0; transform: translateY(6px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
         .stTextInput input:focus,
         .stNumberInput input:focus,
         .stTextArea textarea:focus,
