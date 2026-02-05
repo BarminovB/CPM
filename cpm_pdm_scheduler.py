@@ -38,25 +38,127 @@ STATUS_OPTIONS = [
     "Done",
 ]
 
-STATUS_COLORS = {
-    "Not Started": "#f1f0ee",
-    "Planned": "#dbeafe",
-    "In Progress": "#fde68a",
-    "Blocked": "#fecaca",
-    "Done": "#bbf7d0",
-}
-
 RISK_OPTIONS = [
     "Low",
     "Medium",
     "High",
 ]
 
-RISK_COLORS = {
-    "Low": "#dcfce7",
-    "Medium": "#fef9c3",
-    "High": "#fee2e2",
+THEMES = {
+    "Warm Clay": {
+        "bg": "#f7f5f2",
+        "surface": "#ffffff",
+        "surface2": "#fbfaf7",
+        "ink": "#1f2328",
+        "muted": "#5f6c7b",
+        "accent": "#ff6b4a",
+        "accent2": "#2c7a7b",
+        "border": "#e2ded7",
+        "critical": "#ff6b4a",
+        "critical_soft": "#ffd2c5",
+        "noncritical": "#2c7a7b",
+        "node_crit": "#ffc2b3",
+        "node_noncrit": "#d7eef0",
+        "edge_fs": "#2563eb",
+        "edge_ss": "#2c7a7b",
+        "edge_ff": "#f59e0b",
+        "edge_sf": "#7c3aed",
+        "graph_edge": "#c7bfb4",
+        "highlight": "#ffe1d6",
+        "sidebar_ink": "#f2f2f2",
+        "status": {
+            "Not Started": "#e9e6e1",
+            "Planned": "#e0ecff",
+            "In Progress": "#ffe6a7",
+            "Blocked": "#ffd6d6",
+            "Done": "#d9f5e8",
+        },
+        "risk": {
+            "Low": "#d9f5e8",
+            "Medium": "#fff3c4",
+            "High": "#ffe0e0",
+        },
+    },
+    "Nordic Blue": {
+        "bg": "#f3f6fb",
+        "surface": "#ffffff",
+        "surface2": "#f2f7ff",
+        "ink": "#1c2433",
+        "muted": "#5b6b7f",
+        "accent": "#3b82f6",
+        "accent2": "#0f766e",
+        "border": "#dbe3f2",
+        "critical": "#f97316",
+        "critical_soft": "#ffe2d1",
+        "noncritical": "#0f766e",
+        "node_crit": "#ffd6c7",
+        "node_noncrit": "#d9f0ff",
+        "edge_fs": "#3b82f6",
+        "edge_ss": "#0f766e",
+        "edge_ff": "#f59e0b",
+        "edge_sf": "#8b5cf6",
+        "graph_edge": "#c7d3e6",
+        "highlight": "#ffe7d6",
+        "sidebar_ink": "#f2f2f2",
+        "status": {
+            "Not Started": "#e8eef6",
+            "Planned": "#dbeafe",
+            "In Progress": "#fef3c7",
+            "Blocked": "#fee2e2",
+            "Done": "#dcfce7",
+        },
+        "risk": {
+            "Low": "#dcfce7",
+            "Medium": "#fef3c7",
+            "High": "#fee2e2",
+        },
+    },
+    "Studio Sage": {
+        "bg": "#f4f7f3",
+        "surface": "#ffffff",
+        "surface2": "#f0f4ef",
+        "ink": "#1f2a24",
+        "muted": "#5f6f66",
+        "accent": "#10b981",
+        "accent2": "#2563eb",
+        "border": "#dfe7de",
+        "critical": "#f97316",
+        "critical_soft": "#ffe3c2",
+        "noncritical": "#10b981",
+        "node_crit": "#ffd8b8",
+        "node_noncrit": "#dff5ea",
+        "edge_fs": "#2563eb",
+        "edge_ss": "#10b981",
+        "edge_ff": "#f59e0b",
+        "edge_sf": "#7c3aed",
+        "graph_edge": "#c5d0c6",
+        "highlight": "#ffe6d0",
+        "sidebar_ink": "#f2f2f2",
+        "status": {
+            "Not Started": "#e6ebe7",
+            "Planned": "#d9f0ff",
+            "In Progress": "#fff3c4",
+            "Blocked": "#ffdede",
+            "Done": "#d9f5e8",
+        },
+        "risk": {
+            "Low": "#d9f5e8",
+            "Medium": "#fff3c4",
+            "High": "#ffe0e0",
+        },
+    },
 }
+
+ACTIVE_THEME = THEMES["Warm Clay"]
+STATUS_COLORS = ACTIVE_THEME["status"]
+RISK_COLORS = ACTIVE_THEME["risk"]
+
+
+def set_active_theme(theme_name: str) -> None:
+    global ACTIVE_THEME, STATUS_COLORS, RISK_COLORS
+    ACTIVE_THEME = THEMES.get(theme_name, THEMES["Warm Clay"])
+    STATUS_COLORS = ACTIVE_THEME["status"]
+    RISK_COLORS = ACTIVE_THEME["risk"]
 
 
 # =============================================================================
@@ -111,12 +213,17 @@ def create_network_diagram(scheduler: PDMScheduler) -> plt.Figure:
                     pos[node] = (act.es * 2, pos[node][1])
 
     # Draw edges with different styles based on relationship type
-    edge_colors = {'FS': '#2196F3', 'SS': '#4CAF50', 'FF': '#FF9800', 'SF': '#9C27B0'}
+    edge_colors = {
+        'FS': ACTIVE_THEME["edge_fs"],
+        'SS': ACTIVE_THEME["edge_ss"],
+        'FF': ACTIVE_THEME["edge_ff"],
+        'SF': ACTIVE_THEME["edge_sf"],
+    }
     edge_styles = {'FS': 'solid', 'SS': 'dashed', 'FF': 'dotted', 'SF': 'dashdot'}
 
     for edge in G.edges(data=True):
         rel_type = edge[2].get('rel_type', 'FS')
-        color = edge_colors.get(rel_type, '#2196F3')
+        color = edge_colors.get(rel_type, ACTIVE_THEME["edge_fs"])
         style = edge_styles.get(rel_type, 'solid')
 
         nx.draw_networkx_edges(G, pos, edgelist=[(edge[0], edge[1])],
@@ -135,13 +242,13 @@ def create_network_diagram(scheduler: PDMScheduler) -> plt.Figure:
 
     # Draw non-critical nodes
     nx.draw_networkx_nodes(G, pos, nodelist=non_critical_nodes,
-                          node_color='lightblue', node_size=3000,
+                          node_color=ACTIVE_THEME["node_noncrit"], node_size=3000,
                           node_shape='s', ax=ax)
 
     # Draw critical nodes
     nx.draw_networkx_nodes(G, pos, nodelist=critical_nodes,
-                          node_color='#ffcccb', node_size=3000,
-                          node_shape='s', ax=ax, edgecolors='red', linewidths=3)
+                          node_color=ACTIVE_THEME["node_crit"], node_size=3000,
+                          node_shape='s', ax=ax, edgecolors=ACTIVE_THEME["critical"], linewidths=3)
 
     # Create detailed node labels
     labels = {}
@@ -156,12 +263,12 @@ def create_network_diagram(scheduler: PDMScheduler) -> plt.Figure:
 
     # Add legend
     legend_elements = [
-        mpatches.Patch(color='#ffcccb', edgecolor='red', linewidth=2, label='Critical Activity'),
-        mpatches.Patch(color='lightblue', label='Non-Critical Activity'),
-        plt.Line2D([0], [0], color='#2196F3', linewidth=2, linestyle='solid', label='FS (Finish-to-Start)'),
-        plt.Line2D([0], [0], color='#4CAF50', linewidth=2, linestyle='dashed', label='SS (Start-to-Start)'),
-        plt.Line2D([0], [0], color='#FF9800', linewidth=2, linestyle='dotted', label='FF (Finish-to-Finish)'),
-        plt.Line2D([0], [0], color='#9C27B0', linewidth=2, linestyle='dashdot', label='SF (Start-to-Finish)'),
+        mpatches.Patch(color=ACTIVE_THEME["node_crit"], edgecolor=ACTIVE_THEME["critical"], linewidth=2, label='Critical Activity'),
+        mpatches.Patch(color=ACTIVE_THEME["node_noncrit"], label='Non-Critical Activity'),
+        plt.Line2D([0], [0], color=ACTIVE_THEME["edge_fs"], linewidth=2, linestyle='solid', label='FS (Finish-to-Start)'),
+        plt.Line2D([0], [0], color=ACTIVE_THEME["edge_ss"], linewidth=2, linestyle='dashed', label='SS (Start-to-Start)'),
+        plt.Line2D([0], [0], color=ACTIVE_THEME["edge_ff"], linewidth=2, linestyle='dotted', label='FF (Finish-to-Finish)'),
+        plt.Line2D([0], [0], color=ACTIVE_THEME["edge_sf"], linewidth=2, linestyle='dashdot', label='SF (Start-to-Finish)'),
     ]
     ax.legend(handles=legend_elements, loc='upper left', fontsize=8)
 
@@ -202,11 +309,11 @@ def create_gantt_chart(scheduler: PDMScheduler) -> plt.Figure:
 
         # Determine colors
         if act.is_critical:
-            bar_color = '#e74c3c'  # Red for critical
-            edge_color = '#c0392b'
+            bar_color = ACTIVE_THEME["critical"]
+            edge_color = ACTIVE_THEME["critical"]
         else:
-            bar_color = '#3498db'  # Blue for non-critical
-            edge_color = '#2980b9'
+            bar_color = ACTIVE_THEME["noncritical"]
+            edge_color = ACTIVE_THEME["noncritical"]
 
         # Draw the activity bar
         ax.barh(i, act.duration, left=act.es, height=0.6,
@@ -245,22 +352,22 @@ def create_gantt_chart(scheduler: PDMScheduler) -> plt.Figure:
 
     # Add legend
     legend_elements = [
-        mpatches.Patch(color='#e74c3c', label='Critical Activity'),
-        mpatches.Patch(color='#3498db', label='Non-Critical Activity'),
+        mpatches.Patch(color=ACTIVE_THEME["critical"], label='Critical Activity'),
+        mpatches.Patch(color=ACTIVE_THEME["noncritical"], label='Non-Critical Activity'),
         mpatches.Patch(color='lightgray', label='Total Float'),
     ]
     ax.legend(handles=legend_elements, loc='upper right')
 
     # Add vertical line for project end
-    ax.axvline(x=scheduler.project_duration, color='red', linestyle='--', linewidth=2, label='Project End')
+    ax.axvline(x=scheduler.project_duration, color=ACTIVE_THEME["critical"], linestyle='--', linewidth=2, label='Project End')
     ax.text(scheduler.project_duration, -0.5, f'Day {scheduler.project_duration}',
-           ha='center', va='top', color='red', fontweight='bold')
+           ha='center', va='top', color=ACTIVE_THEME["critical"], fontweight='bold')
 
     plt.tight_layout()
     return fig
 
 
-def create_plotly_gantt(scheduler: PDMScheduler) -> go.Figure:
+def create_plotly_gantt(scheduler: PDMScheduler, scale: str = "Day") -> go.Figure:
     """
     Create an interactive Gantt chart using Plotly.
 
@@ -302,7 +409,7 @@ def create_plotly_gantt(scheduler: PDMScheduler) -> go.Figure:
         x_end="Finish",
         y="Task",
         color="Critical",
-        color_discrete_map={"Yes": "#c43d3d", "No": "#2f5d50"},
+        color_discrete_map={"Yes": ACTIVE_THEME["critical"], "No": ACTIVE_THEME["noncritical"]},
         hover_data=[
             "ID",
             "Owner",
@@ -325,6 +432,14 @@ def create_plotly_gantt(scheduler: PDMScheduler) -> go.Figure:
         yaxis_title="Activities",
         legend_title="Critical",
     )
+    day_ms = 24 * 60 * 60 * 1000
+    scale_lower = scale.lower()
+    if scale_lower == "week":
+        fig.update_xaxes(dtick=7 * day_ms, tickformat="%b %d")
+    elif scale_lower == "month":
+        fig.update_xaxes(dtick="M1", tickformat="%b %Y")
+    else:
+        fig.update_xaxes(dtick=day_ms, tickformat="%b %d")
     return fig
 
 
@@ -374,7 +489,7 @@ def create_plotly_network(scheduler: PDMScheduler) -> go.Figure:
     edge_trace = go.Scatter(
         x=edge_x,
         y=edge_y,
-        line=dict(width=1.5, color="#b3a99a"),
+        line=dict(width=1.5, color=ACTIVE_THEME["graph_edge"]),
         hoverinfo="none",
         mode="lines",
     )
@@ -388,7 +503,7 @@ def create_plotly_network(scheduler: PDMScheduler) -> go.Figure:
         x, y = pos[node]
         node_x.append(x)
         node_y.append(y)
-        node_color.append("#c43d3d" if act.is_critical else "#2f5d50")
+        node_color.append(ACTIVE_THEME["critical"] if act.is_critical else ACTIVE_THEME["noncritical"])
         node_text.append(
             f"{act.id}<br>Owner: {act.owner}<br>Status: {act.status}<br>"
             f"Progress: {act.progress}%<br>Risk: {act.risk}<br>"
@@ -404,7 +519,7 @@ def create_plotly_network(scheduler: PDMScheduler) -> go.Figure:
         textposition="bottom center",
         hovertext=node_text,
         hoverinfo="text",
-        marker=dict(size=18, color=node_color, line=dict(width=2, color="#f6f2ec")),
+        marker=dict(size=18, color=node_color, line=dict(width=2, color=ACTIVE_THEME["surface2"])),
     )
 
     fig = go.Figure(data=[edge_trace, node_trace])
@@ -645,7 +760,7 @@ def render_graph_editor(scheduler: PDMScheduler) -> None:
     edges = []
     for act in scheduler.activities.values():
         label = f"{act.id}\\nD:{act.duration}"
-        color = "#c43d3d" if act.is_critical else "#2f5d50"
+        color = ACTIVE_THEME["critical"] if act.is_critical else ACTIVE_THEME["noncritical"]
         nodes.append(
             Node(id=act.id, label=label, size=25, color=color, shape="box")
         )
@@ -668,7 +783,7 @@ def render_graph_editor(scheduler: PDMScheduler) -> None:
         physics=True,
         hierarchical=False,
         nodeHighlightBehavior=True,
-        highlightColor="#f5e1d2",
+        highlightColor=ACTIVE_THEME["highlight"],
     )
 
     selection = agraph(nodes=nodes, edges=edges, config=config)
@@ -750,7 +865,10 @@ def render_gantt_editor(scheduler: PDMScheduler) -> None:
 
     st.caption("Click a bar to select. Adjust start or duration, then apply.")
 
-    fig = create_plotly_gantt(scheduler)
+    fig = create_plotly_gantt(
+        scheduler,
+        scale=st.session_state.get("gantt_scale", "Day"),
+    )
     fig.update_layout(dragmode="select")
     selected_points = plotly_events(
         fig,
@@ -836,20 +954,84 @@ def main():
         initial_sidebar_state="expanded"
     )
 
+    if "theme_choice" not in st.session_state:
+        st.session_state.theme_choice = "Warm Clay"
+
+    with st.sidebar:
+        st.markdown("### Appearance")
+        theme_choice = st.selectbox(
+            "Theme",
+            options=list(THEMES.keys()),
+            index=list(THEMES.keys()).index(st.session_state.theme_choice),
+            key="theme_choice",
+        )
+
+    set_active_theme(theme_choice)
+    theme = ACTIVE_THEME
+
     st.markdown(
-        """
+        f"""
         <style>
-        :root {
-            --cpm-bg: #f8f7f4;
-            --cpm-surface: #ffffff;
-            --cpm-ink: #1b1a17;
-            --cpm-muted: #66615a;
-            --cpm-accent: #c45f3d;
-            --cpm-accent-2: #2f5d50;
-            --cpm-border: #e3ded6;
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+        :root {{
+            --cpm-bg: {theme["bg"]};
+            --cpm-surface: {theme["surface"]};
+            --cpm-ink: {theme["ink"]};
+            --cpm-muted: {theme["muted"]};
+            --cpm-accent: {theme["accent"]};
+            --cpm-accent-2: {theme["accent2"]};
+            --cpm-border: {theme["border"]};
+            --cpm-surface-2: {theme["surface2"]};
+            --cpm-sidebar-ink: {theme["sidebar_ink"]};
+            --cpm-radius: 16px;
+            --cpm-radius-sm: 12px;
+            --cpm-shadow: 0 16px 36px rgba(15, 23, 42, 0.10);
+        }}
+        html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {{
+            font-family: "Space Grotesk", sans-serif;
+        }}
         .stApp {
-            background: radial-gradient(circle at 10% 0%, #f2ede7 0%, var(--cpm-bg) 45%, #f9f8f6 100%);
+            background: radial-gradient(
+                circle at 10% 0%,
+                color-mix(in srgb, var(--cpm-accent) 12%, #ffffff 88%) 0%,
+                var(--cpm-bg) 45%,
+                var(--cpm-surface) 100%
+            );
+        }
+        [data-testid="stAppViewContainer"] {
+            color: var(--cpm-ink);
+        }
+        [data-testid="stAppViewContainer"] h1,
+        [data-testid="stAppViewContainer"] h2,
+        [data-testid="stAppViewContainer"] h3,
+        [data-testid="stAppViewContainer"] h4,
+        [data-testid="stAppViewContainer"] h5,
+        [data-testid="stAppViewContainer"] h6,
+        [data-testid="stAppViewContainer"] p,
+        [data-testid="stAppViewContainer"] label {
+            color: var(--cpm-ink);
+        }
+        [data-testid="stAppViewContainer"] .stCaption,
+        [data-testid="stAppViewContainer"] small {
+            color: var(--cpm-muted);
+        }
+        [data-testid="stAppViewContainer"] table,
+        [data-testid="stAppViewContainer"] thead th,
+        [data-testid="stAppViewContainer"] tbody td {
+            color: var(--cpm-ink);
+        }
+        [data-testid="stDataFrame"] *,
+        [data-testid="stDataEditor"] * {
+            color: var(--cpm-ink);
+        }
+        [data-testid="stMetricValue"] {
+            color: var(--cpm-ink);
+        }
+        [data-testid="stMetricLabel"] {
+            color: var(--cpm-muted);
+        }
+        [data-testid="stSidebar"] * {
+            color: var(--cpm-sidebar-ink);
         }
         .cpm-hero {
             display: flex;
@@ -858,9 +1040,36 @@ def main():
             gap: 24px;
             padding: 20px 28px;
             background: var(--cpm-surface);
-            border: 1px solid var(--cpm-border);
-            border-radius: 18px;
-            box-shadow: 0 12px 30px rgba(27, 26, 23, 0.08);
+            border: 1px solid transparent;
+            border-radius: var(--cpm-radius);
+            box-shadow: var(--cpm-shadow);
+            backdrop-filter: blur(12px);
+            position: relative;
+        }
+        .cpm-hero::before,
+        .cpm-metric::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            padding: 1px;
+            border-radius: inherit;
+            background: linear-gradient(135deg, color-mix(in srgb, var(--cpm-accent) 35%, transparent), rgba(255,255,255,0.2));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+        }
+        .cpm-hero::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            background: linear-gradient(135deg, rgba(255,255,255,0.55), rgba(255,255,255,0.1));
+            pointer-events: none;
+        }
+        .cpm-hero > * {
+            position: relative;
+            z-index: 1;
         }
         .cpm-hero h1 {
             font-size: 28px;
@@ -879,16 +1088,31 @@ def main():
             padding: 6px 12px;
             border-radius: 999px;
             border: 1px solid var(--cpm-border);
-            background: #fbfaf7;
+            background: var(--cpm-surface-2);
             color: var(--cpm-muted);
             font-size: 12px;
             margin-right: 8px;
+            transition: 0.2s ease;
+        }
+        .cpm-chip:hover {
+            color: var(--cpm-ink);
+            border-color: color-mix(in srgb, var(--cpm-accent) 50%, var(--cpm-border) 50%);
+            background: color-mix(in srgb, var(--cpm-accent) 10%, var(--cpm-surface-2) 90%);
         }
         .cpm-metric {
             padding: 16px;
-            border-radius: 14px;
-            border: 1px solid var(--cpm-border);
+            border-radius: var(--cpm-radius);
+            border: 1px solid transparent;
             background: var(--cpm-surface);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+            position: relative;
+        }
+        .cpm-metric:hover,
+        .cpm-hero:hover {
+            box-shadow: 0 20px 36px rgba(15, 23, 42, 0.16);
+            transform: translateY(-1px);
+            transition: 0.25s ease;
         }
         .cpm-status {
             display: inline-block;
@@ -897,6 +1121,141 @@ def main():
             border: 1px solid var(--cpm-border);
             font-size: 12px;
             margin-right: 6px;
+            color: var(--cpm-ink);
+        }
+        .stButton > button {
+            border-radius: var(--cpm-radius-sm);
+            font-weight: 600;
+            padding: 10px 18px;
+            border: 1px solid transparent;
+            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.10);
+            transition: 0.2s ease;
+        }
+        .stButton > button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 16px 28px rgba(15, 23, 42, 0.18);
+        }
+        .stButton > button[kind="primary"] {
+            background: var(--cpm-accent);
+            color: #ffffff;
+            border: none;
+        }
+        .stButton > button[kind="primary"]:hover {
+            background: color-mix(in srgb, var(--cpm-accent) 85%, #000 15%);
+            color: #ffffff;
+        }
+        .stButton > button:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 4px color-mix(in srgb, var(--cpm-accent) 25%, transparent);
+        }
+        :focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--cpm-accent) 35%, transparent);
+            border-radius: var(--cpm-radius-sm);
+        }
+        [data-testid="stDataFrame"] :focus-visible,
+        [data-testid="stDataEditor"] :focus-visible {
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--cpm-accent) 30%, transparent);
+        }
+        .cpm-focus-trail:focus-within {
+            position: relative;
+        }
+        .cpm-focus-trail:focus-within::after {
+            content: "";
+            position: absolute;
+            inset: -6px;
+            border-radius: calc(var(--cpm-radius) + 6px);
+            border: 1px solid color-mix(in srgb, var(--cpm-accent) 35%, transparent);
+            box-shadow: 0 0 0 6px color-mix(in srgb, var(--cpm-accent) 12%, transparent);
+            animation: focusTrail 0.4s ease;
+            pointer-events: none;
+        }
+        @keyframes focusTrail {
+            from { opacity: 0; transform: scale(0.98); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .stTextInput input,
+        .stNumberInput input,
+        .stTextArea textarea,
+        .stSelectbox div[data-baseweb="select"] > div,
+        .stMultiSelect div[data-baseweb="select"] > div {
+            border-radius: var(--cpm-radius-sm);
+            background: var(--cpm-surface);
+            border: 1px solid var(--cpm-border);
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+            transition: 0.2s ease;
+        }
+        .stTextInput input:hover,
+        .stNumberInput input:hover,
+        .stTextArea textarea:hover,
+        .stSelectbox div[data-baseweb="select"] > div:hover,
+        .stMultiSelect div[data-baseweb="select"] > div:hover {
+            border-color: color-mix(in srgb, var(--cpm-accent) 25%, var(--cpm-border) 75%);
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+        }
+        [data-testid="stTabs"] button {
+            transition: 0.2s ease;
+            border-radius: 12px;
+        }
+        [data-testid="stTabs"] button:hover {
+            background: color-mix(in srgb, var(--cpm-accent) 8%, transparent);
+        }
+        [data-testid="stTabs"] [aria-selected="true"] {
+            background: color-mix(in srgb, var(--cpm-accent) 18%, transparent);
+            color: var(--cpm-ink);
+            box-shadow: inset 0 -2px 0 var(--cpm-accent);
+        }
+        .cpm-shimmer {
+            position: relative;
+            overflow: hidden;
+            background: color-mix(in srgb, var(--cpm-accent) 6%, var(--cpm-surface) 94%);
+            border-radius: 12px;
+            height: 12px;
+            border: 1px solid var(--cpm-border);
+        }
+        .cpm-shimmer::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            transform: translateX(-100%);
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+            animation: shimmer 1.6s infinite;
+        }
+        @keyframes shimmer {
+            100% { transform: translateX(100%); }
+        }
+        .cpm-glass {
+            background: color-mix(in srgb, var(--cpm-surface) 70%, transparent);
+            border-radius: var(--cpm-radius);
+            border: 1px solid color-mix(in srgb, var(--cpm-border) 60%, transparent);
+            box-shadow: 0 18px 32px rgba(15, 23, 42, 0.10);
+            backdrop-filter: blur(12px);
+            padding: 12px;
+        }
+        .cpm-fade-in {
+            animation: fadeInUp 0.4s ease;
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .stTextInput input:focus,
+        .stNumberInput input:focus,
+        .stTextArea textarea:focus,
+        .stSelectbox div[data-baseweb="select"] > div:focus,
+        .stMultiSelect div[data-baseweb="select"] > div:focus {
+            outline: none;
+            border-color: color-mix(in srgb, var(--cpm-accent) 55%, var(--cpm-border) 45%);
+            box-shadow: 0 0 0 4px color-mix(in srgb, var(--cpm-accent) 20%, transparent);
+        }
+        [data-testid="stSidebar"] .stTextInput input,
+        [data-testid="stSidebar"] .stNumberInput input,
+        [data-testid="stSidebar"] .stTextArea textarea,
+        [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div {
+            background: #1f2430;
+            border-color: #2a3242;
+            color: #f2f2f2;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
         }
         </style>
         """,
@@ -916,9 +1275,9 @@ def main():
                 </div>
             </div>
             <div style="text-align:right">
-                <div style="font-size:12px;color:#8a847c;">Workspace</div>
-                <div style="font-size:18px;font-weight:600;color:#1b1a17;">Default Portfolio</div>
-                <div style="font-size:12px;color:#8a847c;">Last sync: auto</div>
+                <div style="font-size:12px;color:var(--cpm-muted);">Workspace</div>
+                <div style="font-size:18px;font-weight:600;color:var(--cpm-ink);">Default Portfolio</div>
+                <div style="font-size:12px;color:var(--cpm-muted);">Last sync: auto</div>
             </div>
         </div>
         """,
@@ -937,6 +1296,7 @@ def main():
     with st.sidebar:
         st.header("Create Activity")
 
+        st.markdown("<div class='cpm-focus-trail'>", unsafe_allow_html=True)
         activity_id = st.text_input(
             "Activity ID",
             placeholder="e.g., A, B, TASK1",
@@ -1064,6 +1424,7 @@ def main():
                     st.rerun()
                 else:
                     st.error(message)
+        st.markdown("</div>", unsafe_allow_html=True)
 
         st.divider()
 
@@ -1155,6 +1516,7 @@ def main():
         edit_mode = st.toggle("Edit mode", value=True, key="board_edit_mode")
 
         if edit_mode:
+            st.markdown("<div class='cpm-focus-trail'>", unsafe_allow_html=True)
             edited_df = st.data_editor(
                 board_df,
                 use_container_width=True,
@@ -1188,6 +1550,7 @@ def main():
                 },
                 key="board_editor",
             )
+            st.markdown("</div>", unsafe_allow_html=True)
         else:
             legend_html = " ".join(
                 [
@@ -1204,6 +1567,7 @@ def main():
             )
             st.markdown(risk_html, unsafe_allow_html=True)
 
+            st.markdown("<div class='cpm-focus-trail'>", unsafe_allow_html=True)
             filter_cols = st.columns([2, 2, 2, 1])
             with filter_cols[0]:
                 status_filter = st.multiselect(
@@ -1221,6 +1585,7 @@ def main():
                 search_text = st.text_input("Search")
             with filter_cols[3]:
                 critical_only = st.checkbox("Critical only", value=False)
+            st.markdown("</div>", unsafe_allow_html=True)
 
             view_df = board_df.copy()
             if status_filter:
@@ -1247,12 +1612,12 @@ def main():
                     st.info("Run calculation to filter by critical activities.")
 
             def status_style(value: str) -> str:
-                color = STATUS_COLORS.get(value, "#ffffff")
-                return f"background-color: {color}; color: #1b1a17;"
+                color = STATUS_COLORS.get(value, ACTIVE_THEME["surface2"])
+                return f"background-color: {color}; color: {ACTIVE_THEME['ink']};"
 
             def risk_style(value: str) -> str:
-                color = RISK_COLORS.get(value, "#ffffff")
-                return f"background-color: {color}; color: #1b1a17;"
+                color = RISK_COLORS.get(value, ACTIVE_THEME["surface2"])
+                return f"background-color: {color}; color: {ACTIVE_THEME['ink']};"
 
             styled = (
                 view_df.style
@@ -1355,13 +1720,14 @@ def main():
                 act = scheduler.activities[selected_id]
 
                 st.markdown(
-                    f"<span class='cpm-status' style='background:{STATUS_COLORS.get(act.status, '#f1f0ee')};'>"
+                    f"<span class='cpm-status' style='background:{STATUS_COLORS.get(act.status, ACTIVE_THEME['surface2'])};'>"
                     f"{act.status}</span>"
-                    f"<span class='cpm-status' style='background:{RISK_COLORS.get(act.risk, '#dcfce7')};'>"
+                    f"<span class='cpm-status' style='background:{RISK_COLORS.get(act.risk, ACTIVE_THEME['surface2'])};'>"
                     f"Risk: {act.risk}</span>",
                     unsafe_allow_html=True,
                 )
 
+                st.markdown("<div class='cpm-focus-trail'>", unsafe_allow_html=True)
                 with st.form("details_form"):
                     description = st.text_input("Description", value=act.description)
                     owner = st.text_input("Owner", value=act.owner)
@@ -1408,6 +1774,7 @@ def main():
                     )
 
                     save = st.form_submit_button("Save changes", type="primary")
+                st.markdown("</div>", unsafe_allow_html=True)
 
                 if save:
                     new_constraint = int(constraint_value) if use_constraint else None
@@ -1586,26 +1953,46 @@ def main():
         else:
             st.info("Add activities to enable the details drawer.")
 
+        if not st.session_state.calculated:
+            st.caption("Schedule preview will appear after calculation.")
+            st.markdown("<div class='cpm-shimmer'></div>", unsafe_allow_html=True)
+
     if st.session_state.calculated and scheduler.activities:
         st.divider()
         st.header("Calculation Results")
 
         results_df = scheduler.get_results_dataframe()
 
+        st.markdown("<div class='cpm-glass cpm-fade-in'>", unsafe_allow_html=True)
         def highlight_critical(row):
             if row['Critical'] == 'Yes':
-                return ['background-color: #ffcccb'] * len(row)
+                return [f'background-color: {ACTIVE_THEME["critical_soft"]}'] * len(row)
             return [''] * len(row)
 
         styled_df = results_df.style.apply(highlight_critical, axis=1)
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
         st.subheader("Critical Paths")
+        st.markdown("<div class='cpm-glass cpm-fade-in'>", unsafe_allow_html=True)
         if scheduler.critical_paths:
             for idx, path in enumerate(scheduler.critical_paths, start=1):
                 st.markdown(f"**{idx}. {' -> '.join(path)}**")
         else:
             st.info("No critical path identified.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.subheader("Gantt Overview")
+        st.markdown("<div class='cpm-glass cpm-fade-in'>", unsafe_allow_html=True)
+        gantt_scale = st.selectbox(
+            "Gantt scale",
+            options=["Day", "Week", "Month"],
+            index=0,
+            key="gantt_scale",
+        )
+        gantt_fig = create_plotly_gantt(scheduler, scale=gantt_scale)
+        st.plotly_chart(gantt_fig, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
         tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
             [
@@ -1643,7 +2030,10 @@ def main():
 
         with tab3:
             st.subheader("Interactive Gantt Timeline")
-            fig = create_plotly_gantt(scheduler)
+            fig = create_plotly_gantt(
+                scheduler,
+                scale=st.session_state.get("gantt_scale", "Day"),
+            )
             st.plotly_chart(fig, use_container_width=True)
 
         with tab4:
@@ -1654,14 +2044,18 @@ def main():
         with tab5:
             st.subheader("Graph Editor")
             if scheduler.activities:
+                st.markdown("<div class='cpm-focus-trail'>", unsafe_allow_html=True)
                 render_graph_editor(scheduler)
+                st.markdown("</div>", unsafe_allow_html=True)
             else:
                 st.info("Add activities first to edit dependencies.")
 
         with tab6:
             st.subheader("Gantt Editor")
             if scheduler.activities:
+                st.markdown("<div class='cpm-focus-trail'>", unsafe_allow_html=True)
                 render_gantt_editor(scheduler)
+                st.markdown("</div>", unsafe_allow_html=True)
             else:
                 st.info("Add activities first to edit the schedule.")
 
@@ -1677,6 +2071,7 @@ def main():
 
         st.divider()
         st.header("Dependency Health")
+        st.markdown("<div class='cpm-glass cpm-fade-in'>", unsafe_allow_html=True)
         if st.session_state.calculated:
             health = compute_dependency_health(scheduler)
             col_a, col_b, col_c, col_d = st.columns([1, 1, 1, 1])
@@ -1697,6 +2092,7 @@ def main():
                 st.dataframe(conflicts, use_container_width=True, hide_index=True)
         else:
             st.info("Run calculation to evaluate dependency health.")
+        st.markdown("</div>", unsafe_allow_html=True)
 
     st.divider()
     st.markdown(
