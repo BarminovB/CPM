@@ -432,6 +432,14 @@ def create_plotly_gantt(scheduler: PDMScheduler, scale: str = "Day") -> go.Figur
         yaxis_title="Activities",
         legend_title="Critical",
     )
+    fig.update_layout(
+        template="plotly_white",
+        paper_bgcolor=ACTIVE_THEME["surface"],
+        plot_bgcolor=ACTIVE_THEME["surface"],
+        font=dict(color=ACTIVE_THEME["ink"], family="Space Grotesk"),
+    )
+    fig.update_xaxes(gridcolor=ACTIVE_THEME["border"])
+    fig.update_yaxes(gridcolor=ACTIVE_THEME["border"])
     day_ms = 24 * 60 * 60 * 1000
     scale_lower = scale.lower()
     if scale_lower == "week":
@@ -530,6 +538,12 @@ def create_plotly_network(scheduler: PDMScheduler) -> go.Figure:
         margin=dict(l=20, r=20, t=40, b=20),
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+    )
+    fig.update_layout(
+        template="plotly_white",
+        paper_bgcolor=ACTIVE_THEME["surface"],
+        plot_bgcolor=ACTIVE_THEME["surface"],
+        font=dict(color=ACTIVE_THEME["ink"], family="Space Grotesk"),
     )
     return fig
 
@@ -1149,9 +1163,11 @@ def main():
             border-radius: var(--cpm-radius-sm);
             font-weight: 600;
             padding: 10px 18px;
-            border: 1px solid transparent;
+            border: 1px solid var(--cpm-border);
             box-shadow: 0 10px 20px rgba(15, 23, 42, 0.10);
             transition: 0.2s ease;
+            background: var(--cpm-surface-2);
+            color: var(--cpm-ink);
         }
         .stButton > button:hover {
             transform: translateY(-1px);
@@ -1161,6 +1177,12 @@ def main():
             background: var(--cpm-accent);
             color: #ffffff;
             border: none;
+        }
+        .stButton > button:disabled {
+            opacity: 0.6;
+            color: var(--cpm-muted);
+            background: var(--cpm-surface-2);
+            border-color: var(--cpm-border);
         }
         .stButton > button[kind="primary"]:hover {
             background: color-mix(in srgb, var(--cpm-accent) 85%, #000 15%);
