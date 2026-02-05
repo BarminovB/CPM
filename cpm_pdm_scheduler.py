@@ -969,27 +969,26 @@ def main():
     set_active_theme(theme_choice)
     theme = ACTIVE_THEME
 
-    st.markdown(
-        f"""
+    css = """
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
-        :root {{
-            --cpm-bg: {theme["bg"]};
-            --cpm-surface: {theme["surface"]};
-            --cpm-ink: {theme["ink"]};
-            --cpm-muted: {theme["muted"]};
-            --cpm-accent: {theme["accent"]};
-            --cpm-accent-2: {theme["accent2"]};
-            --cpm-border: {theme["border"]};
-            --cpm-surface-2: {theme["surface2"]};
-            --cpm-sidebar-ink: {theme["sidebar_ink"]};
+        :root {
+            --cpm-bg: __CPM_BG__;
+            --cpm-surface: __CPM_SURFACE__;
+            --cpm-ink: __CPM_INK__;
+            --cpm-muted: __CPM_MUTED__;
+            --cpm-accent: __CPM_ACCENT__;
+            --cpm-accent-2: __CPM_ACCENT2__;
+            --cpm-border: __CPM_BORDER__;
+            --cpm-surface-2: __CPM_SURFACE2__;
+            --cpm-sidebar-ink: __CPM_SIDEBAR_INK__;
             --cpm-radius: 16px;
             --cpm-radius-sm: 12px;
             --cpm-shadow: 0 16px 36px rgba(15, 23, 42, 0.10);
-        }}
-        html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {{
+        }
+        html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
             font-family: "Space Grotesk", sans-serif;
-        }}
+        }
         .stApp {
             background: radial-gradient(
                 circle at 10% 0%,
@@ -1170,28 +1169,9 @@ def main():
             animation: focusTrail 0.4s ease;
             pointer-events: none;
         }
-        @keyframes focusTrail {{
-            from {{ opacity: 0; transform: scale(0.98); }}
-            to {{ opacity: 1; transform: scale(1); }}
-        }}
-        .stTextInput input,
-        .stNumberInput input,
-        .stTextArea textarea,
-        .stSelectbox div[data-baseweb="select"] > div,
-        .stMultiSelect div[data-baseweb="select"] > div {
-            border-radius: var(--cpm-radius-sm);
-            background: var(--cpm-surface);
-            border: 1px solid var(--cpm-border);
-            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
-            transition: 0.2s ease;
-        }
-        .stTextInput input:hover,
-        .stNumberInput input:hover,
-        .stTextArea textarea:hover,
-        .stSelectbox div[data-baseweb="select"] > div:hover,
-        .stMultiSelect div[data-baseweb="select"] > div:hover {
-            border-color: color-mix(in srgb, var(--cpm-accent) 25%, var(--cpm-border) 75%);
-            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+        @keyframes focusTrail {
+            from { opacity: 0; transform: scale(0.98); }
+            to { opacity: 1; transform: scale(1); }
         }
         [data-testid="stTabs"] button {
             transition: 0.2s ease;
@@ -1221,9 +1201,9 @@ def main():
             background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
             animation: shimmer 1.6s infinite;
         }
-        @keyframes shimmer {{
-            100% {{ transform: translateX(100%); }}
-        }}
+        @keyframes shimmer {
+            100% { transform: translateX(100%); }
+        }
         .cpm-glass {
             background: color-mix(in srgb, var(--cpm-surface) 70%, transparent);
             border-radius: var(--cpm-radius);
@@ -1235,10 +1215,29 @@ def main():
         .cpm-fade-in {
             animation: fadeInUp 0.4s ease;
         }
-        @keyframes fadeInUp {{
-            from {{ opacity: 0; transform: translateY(6px); }}
-            to {{ opacity: 1; transform: translateY(0); }}
-        }}
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .stTextInput input,
+        .stNumberInput input,
+        .stTextArea textarea,
+        .stSelectbox div[data-baseweb="select"] > div,
+        .stMultiSelect div[data-baseweb="select"] > div {
+            border-radius: var(--cpm-radius-sm);
+            background: var(--cpm-surface);
+            border: 1px solid var(--cpm-border);
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+            transition: 0.2s ease;
+        }
+        .stTextInput input:hover,
+        .stNumberInput input:hover,
+        .stTextArea textarea:hover,
+        .stSelectbox div[data-baseweb="select"] > div:hover,
+        .stMultiSelect div[data-baseweb="select"] > div:hover {
+            border-color: color-mix(in srgb, var(--cpm-accent) 25%, var(--cpm-border) 75%);
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+        }
         .stTextInput input:focus,
         .stNumberInput input:focus,
         .stTextArea textarea:focus,
@@ -1258,9 +1257,23 @@ def main():
             box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
         }
         </style>
-        """,
-        unsafe_allow_html=True,
-    )
+        """
+    replacements = {
+        "__CPM_BG__": theme["bg"],
+        "__CPM_SURFACE__": theme["surface"],
+        "__CPM_INK__": theme["ink"],
+        "__CPM_MUTED__": theme["muted"],
+        "__CPM_ACCENT__": theme["accent"],
+        "__CPM_ACCENT2__": theme["accent2"],
+        "__CPM_BORDER__": theme["border"],
+        "__CPM_SURFACE2__": theme["surface2"],
+        "__CPM_SIDEBAR_INK__": theme["sidebar_ink"],
+    }
+    for token, value in replacements.items():
+        css = css.replace(token, value)
+
+    st.markdown(css, unsafe_allow_html=True)
+
 
     st.markdown(
         """
