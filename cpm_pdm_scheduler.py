@@ -17,14 +17,46 @@ Version: 1.0.0
 """
 
 import streamlit as st
+import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.patches import FancyBboxPatch
 import re
+import plotly.express as px
+import plotly.graph_objects as go
+from typing import Tuple, List, Dict
 
 from cpm.engine import PDMScheduler
 from cpm.models import Relationship
+
+STATUS_OPTIONS = [
+    "Not Started",
+    "Planned",
+    "In Progress",
+    "Blocked",
+    "Done",
+]
+
+STATUS_COLORS = {
+    "Not Started": "#f1f0ee",
+    "Planned": "#dbeafe",
+    "In Progress": "#fde68a",
+    "Blocked": "#fecaca",
+    "Done": "#bbf7d0",
+}
+
+RISK_OPTIONS = [
+    "Low",
+    "Medium",
+    "High",
+]
+
+RISK_COLORS = {
+    "Low": "#dcfce7",
+    "Medium": "#fef9c3",
+    "High": "#fee2e2",
+}
 
 
 # =============================================================================
@@ -228,6 +260,568 @@ def create_gantt_chart(scheduler: PDMScheduler) -> plt.Figure:
     return fig
 
 
+def create_plotly_gantt(scheduler: PDMScheduler) -> go.Figure:
+    """
+    Create an interactive Gantt chart using Plotly.
+
+    Uses ES/EF as offsets from a fixed base date for a clean timeline view.
+    """
+    if not scheduler.activities:
+        fig = go.Figure()
+        fig.add_annotation(text="No activities to display", x=0.5, y=0.5, showarrow=False)
+        fig.update_layout(height=400)
+        return fig
+
+    base_date = pd.Timestamp("2026-02-05")
+    data = []
+    for act in scheduler.activities.values():
+        if act.es is None or act.ef is None:
+            continue
+        data.append(
+            {
+                "Task": f"{act.id} - {act.description}",
+                "Start": base_date + pd.Timedelta(days=int(act.es)),
+                "Finish": base_date + pd.Timedelta(days=int(act.ef)),
+                "Critical": "Yes" if act.is_critical else "No",
+                "ID": act.id,
+                "Duration": act.duration,
+                "ES": act.es,
+                "EF": act.ef,
+                "TF": act.total_float,
+                "Constraint ES": act.constraint_es,
+                "Owner": act.owner,
+                "Progress": act.progress,
+                "Risk": act.risk,
+            }
+        )
+
+    df = pd.DataFrame(data)
+    fig = px.timeline(
+        df,
+        x_start="Start",
+        x_end="Finish",
+        y="Task",
+        color="Critical",
+        color_discrete_map={"Yes": "#c43d3d", "No": "#2f5d50"},
+        hover_data=[
+            "ID",
+            "Owner",
+            "Progress",
+            "Risk",
+            "Duration",
+            "ES",
+            "EF",
+            "TF",
+            "Constraint ES",
+        ],
+        custom_data=["ID", "ES", "EF", "Duration"],
+    )
+    fig.update_yaxes(autorange="reversed")
+    fig.update_layout(
+        height=max(450, len(df) * 32),
+        margin=dict(l=10, r=10, t=30, b=10),
+        title="Interactive Gantt Timeline",
+        xaxis_title="Calendar",
+        yaxis_title="Activities",
+        legend_title="Critical",
+    )
+    return fig
+
+
+def create_plotly_network(scheduler: PDMScheduler) -> go.Figure:
+    """
+    Create an interactive network diagram using Plotly.
+    """
+    if not scheduler.activities:
+        fig = go.Figure()
+        fig.add_annotation(text="No activities to display", x=0.5, y=0.5, showarrow=False)
+        fig.update_layout(height=400)
+        return fig
+
+    G = nx.DiGraph()
+    for act_id, act in scheduler.activities.items():
+        G.add_node(act_id, activity=act)
+    for act_id, act in scheduler.activities.items():
+        for pred_rel in act.predecessors:
+            G.add_edge(
+                pred_rel.predecessor_id,
+                act_id,
+                rel_type=pred_rel.relation_type,
+                lag=pred_rel.lag,
+            )
+
+    try:
+        pos = nx.nx_agraph.graphviz_layout(G, prog="dot", args="-Grankdir=LR")
+    except Exception:
+        pos = nx.spring_layout(G, k=2, iterations=50, seed=42)
+
+    if any(scheduler.activities[n].es is not None for n in G.nodes()):
+        for node in G.nodes():
+            act = scheduler.activities[node]
+            if act.es is not None:
+                pos[node] = (act.es * 2, pos[node][1])
+
+    edge_x = []
+    edge_y = []
+    edge_text = []
+    for u, v, data in G.edges(data=True):
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+        edge_text.append(f"{u} -> {v} ({data.get('rel_type')} {data.get('lag')})")
+
+    edge_trace = go.Scatter(
+        x=edge_x,
+        y=edge_y,
+        line=dict(width=1.5, color="#b3a99a"),
+        hoverinfo="none",
+        mode="lines",
+    )
+
+    node_x = []
+    node_y = []
+    node_text = []
+    node_color = []
+    for node in G.nodes():
+        act = scheduler.activities[node]
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        node_color.append("#c43d3d" if act.is_critical else "#2f5d50")
+        node_text.append(
+            f"{act.id}<br>Owner: {act.owner}<br>Status: {act.status}<br>"
+            f"Progress: {act.progress}%<br>Risk: {act.risk}<br>"
+            f"Dur: {act.duration}<br>ES/EF: {act.es}/{act.ef}<br>"
+            f"LS/LF: {act.ls}/{act.lf}<br>TF: {act.total_float}"
+        )
+
+    node_trace = go.Scatter(
+        x=node_x,
+        y=node_y,
+        mode="markers+text",
+        text=[node for node in G.nodes()],
+        textposition="bottom center",
+        hovertext=node_text,
+        hoverinfo="text",
+        marker=dict(size=18, color=node_color, line=dict(width=2, color="#f6f2ec")),
+    )
+
+    fig = go.Figure(data=[edge_trace, node_trace])
+    fig.update_layout(
+        title="Interactive Network Diagram",
+        showlegend=False,
+        height=600,
+        margin=dict(l=20, r=20, t=40, b=20),
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+    )
+    return fig
+
+
+def add_dependency_to_scheduler(
+    scheduler: PDMScheduler,
+    predecessor_id: str,
+    successor_id: str,
+    rel_type: str,
+    lag: int,
+) -> Tuple[bool, str]:
+    if predecessor_id == successor_id:
+        return False, "Predecessor and successor must be different."
+    if predecessor_id not in scheduler.activities or successor_id not in scheduler.activities:
+        return False, "Both predecessor and successor must exist."
+    if rel_type not in PDMScheduler.VALID_RELATIONS:
+        return False, "Invalid relationship type."
+    for rel in scheduler.activities[successor_id].predecessors:
+        if (
+            rel.predecessor_id == predecessor_id
+            and rel.relation_type == rel_type
+            and rel.lag == lag
+        ):
+            return False, "This dependency already exists."
+    scheduler.activities[successor_id].predecessors.append(
+        Relationship(predecessor_id, rel_type, lag)
+    )
+    return True, "Dependency added."
+
+
+def generate_dependency_suggestions(
+    scheduler: PDMScheduler,
+    act_id: str,
+    tolerance: int = 2,
+    max_suggestions: int = 6,
+) -> List[Dict[str, object]]:
+    if act_id not in scheduler.activities:
+        return []
+    act = scheduler.activities[act_id]
+    if act.es is None or act.ef is None:
+        return []
+
+    existing = {
+        (rel.predecessor_id, rel.relation_type, rel.lag)
+        for rel in act.predecessors
+    }
+    suggestions: List[Dict[str, object]] = []
+    critical_ids = {
+        aid for aid, a in scheduler.activities.items() if a.total_float == 0
+    }
+    act_is_critical = act_id in critical_ids
+
+    for pred_id, pred in scheduler.activities.items():
+        if pred_id == act_id:
+            continue
+
+        if pred.ef is not None and act.es is not None:
+            lag = act.es - pred.ef
+            if abs(lag) <= tolerance:
+                if (pred_id, "FS", lag) not in existing:
+                    score = abs(lag)
+                    if pred_id in critical_ids or act_is_critical:
+                        score -= 0.3
+                    suggestions.append(
+                        {
+                            "pred": pred_id,
+                            "type": "FS",
+                            "lag": lag,
+                            "score": score,
+                            "reason": "FS aligns successor ES to predecessor EF",
+                            "critical_hint": pred_id in critical_ids or act_is_critical,
+                        }
+                    )
+
+        if pred.es is not None and act.es is not None:
+            lag = act.es - pred.es
+            if abs(lag) <= tolerance:
+                if (pred_id, "SS", lag) not in existing:
+                    score = abs(lag) + 0.1
+                    if pred_id in critical_ids or act_is_critical:
+                        score -= 0.2
+                    suggestions.append(
+                        {
+                            "pred": pred_id,
+                            "type": "SS",
+                            "lag": lag,
+                            "score": score,
+                            "reason": "SS aligns successor ES to predecessor ES",
+                            "critical_hint": pred_id in critical_ids or act_is_critical,
+                        }
+                    )
+
+        if pred.ef is not None and act.ef is not None:
+            lag = act.ef - pred.ef
+            if abs(lag) <= tolerance:
+                if (pred_id, "FF", lag) not in existing:
+                    score = abs(lag) + 0.2
+                    if pred_id in critical_ids or act_is_critical:
+                        score -= 0.15
+                    suggestions.append(
+                        {
+                            "pred": pred_id,
+                            "type": "FF",
+                            "lag": lag,
+                            "score": score,
+                            "reason": "FF aligns successor EF to predecessor EF",
+                            "critical_hint": pred_id in critical_ids or act_is_critical,
+                        }
+                    )
+
+        if pred.es is not None and act.ef is not None:
+            lag = act.ef - pred.es
+            if abs(lag) <= tolerance:
+                if (pred_id, "SF", lag) not in existing:
+                    score = abs(lag) + 0.3
+                    if pred_id in critical_ids or act_is_critical:
+                        score -= 0.1
+                    suggestions.append(
+                        {
+                            "pred": pred_id,
+                            "type": "SF",
+                            "lag": lag,
+                            "score": score,
+                            "reason": "SF aligns successor EF to predecessor ES",
+                            "critical_hint": pred_id in critical_ids or act_is_critical,
+                        }
+                    )
+
+    suggestions.sort(key=lambda x: (x["score"], x["pred"], x["type"]))
+    return suggestions[:max_suggestions]
+
+
+def analyze_dependency_conflicts(scheduler: PDMScheduler) -> pd.DataFrame:
+    rows = []
+    for act in scheduler.activities.values():
+        if act.es is None or act.ef is None:
+            continue
+        for rel in act.predecessors:
+            pred = scheduler.activities.get(rel.predecessor_id)
+            if not pred or pred.es is None or pred.ef is None:
+                continue
+            violation = 0
+            if rel.relation_type == "FS":
+                violation = (pred.ef + rel.lag) - act.es
+                constraint = f"ES >= EF({pred.id}) + {rel.lag}"
+            elif rel.relation_type == "SS":
+                violation = (pred.es + rel.lag) - act.es
+                constraint = f"ES >= ES({pred.id}) + {rel.lag}"
+            elif rel.relation_type == "FF":
+                violation = (pred.ef + rel.lag) - act.ef
+                constraint = f"EF >= EF({pred.id}) + {rel.lag}"
+            elif rel.relation_type == "SF":
+                violation = (pred.es + rel.lag) - act.ef
+                constraint = f"EF >= ES({pred.id}) + {rel.lag}"
+            else:
+                continue
+
+            if violation > 0:
+                rows.append(
+                    {
+                        "Activity": act.id,
+                        "Predecessor": pred.id,
+                        "Type": rel.relation_type,
+                        "Lag": rel.lag,
+                        "Violation": violation,
+                        "Constraint": constraint,
+                    }
+                )
+
+    return pd.DataFrame(rows)
+
+
+def compute_dependency_health(scheduler: PDMScheduler) -> Dict[str, object]:
+    total_relations = 0
+    for act in scheduler.activities.values():
+        total_relations += len(act.predecessors)
+
+    conflicts = analyze_dependency_conflicts(scheduler)
+    conflict_count = len(conflicts)
+    negative_ff = 0
+    for act in scheduler.activities.values():
+        if act.free_float is not None and act.free_float < 0:
+            negative_ff += 1
+
+    if total_relations == 0:
+        base_score = 100
+    else:
+        base_score = max(0, int(100 - (conflict_count / total_relations) * 100))
+
+    if negative_ff:
+        base_score = max(0, base_score - min(20, negative_ff * 5))
+
+    if total_relations < max(1, len(scheduler.activities) - 1):
+        base_score = max(0, base_score - 10)
+
+    status = "Healthy"
+    if base_score < 70:
+        status = "At Risk"
+    if base_score < 40:
+        status = "Critical"
+
+    return {
+        "score": base_score,
+        "status": status,
+        "total_relations": total_relations,
+        "conflicts": conflict_count,
+        "negative_ff": negative_ff,
+    }
+
+
+def render_graph_editor(scheduler: PDMScheduler) -> None:
+    try:
+        from streamlit_agraph import agraph, Node, Edge, Config
+    except Exception:
+        st.warning("streamlit-agraph is not installed. Add it to requirements.txt.")
+        return
+
+    st.caption(
+        "Drag nodes to arrange the layout. Click a node to set predecessor, then click another to set successor."
+    )
+
+    if "graph_pred" not in st.session_state:
+        st.session_state.graph_pred = None
+    if "graph_succ" not in st.session_state:
+        st.session_state.graph_succ = None
+
+    nodes = []
+    edges = []
+    for act in scheduler.activities.values():
+        label = f"{act.id}\\nD:{act.duration}"
+        color = "#c43d3d" if act.is_critical else "#2f5d50"
+        nodes.append(
+            Node(id=act.id, label=label, size=25, color=color, shape="box")
+        )
+    for act in scheduler.activities.values():
+        for rel in act.predecessors:
+            label = f"{rel.relation_type}({rel.lag:+d})"
+            edges.append(
+                Edge(
+                    source=rel.predecessor_id,
+                    target=act.id,
+                    label=label,
+                    type="CURVE_SMOOTH",
+                )
+            )
+
+    config = Config(
+        width=1000,
+        height=600,
+        directed=True,
+        physics=True,
+        hierarchical=False,
+        nodeHighlightBehavior=True,
+        highlightColor="#f5e1d2",
+    )
+
+    selection = agraph(nodes=nodes, edges=edges, config=config)
+    selected_node = None
+    if isinstance(selection, dict):
+        selected_node = selection.get("node") or selection.get("selected_node")
+    elif isinstance(selection, str):
+        selected_node = selection
+
+    if selected_node:
+        if st.session_state.graph_pred is None:
+            st.session_state.graph_pred = selected_node
+        elif st.session_state.graph_succ is None and selected_node != st.session_state.graph_pred:
+            st.session_state.graph_succ = selected_node
+
+    if st.session_state.graph_pred or st.session_state.graph_succ:
+        st.info(
+            f"Selected: {st.session_state.graph_pred or '-'} -> {st.session_state.graph_succ or '-'}"
+        )
+
+    activity_ids = sorted(scheduler.activities.keys())
+
+    col_a, col_b, col_c, col_d = st.columns([2, 2, 2, 1])
+    with col_a:
+        pred_index = 0
+        if st.session_state.graph_pred in activity_ids:
+            pred_index = 1 + activity_ids.index(st.session_state.graph_pred)
+        pred = st.selectbox(
+            "Predecessor",
+            options=["(select)"] + activity_ids,
+            index=pred_index,
+            key="graph_pred_select",
+        )
+    with col_b:
+        succ_index = 0
+        if st.session_state.graph_succ in activity_ids:
+            succ_index = 1 + activity_ids.index(st.session_state.graph_succ)
+        succ = st.selectbox(
+            "Successor",
+            options=["(select)"] + activity_ids,
+            index=succ_index,
+            key="graph_succ_select",
+        )
+    with col_c:
+        rel_type = st.selectbox("Type", options=["FS", "SS", "FF", "SF"], key="graph_rel_type")
+    with col_d:
+        lag = st.number_input("Lag", value=0, step=1, key="graph_lag")
+
+    if st.button("Add Dependency", type="primary"):
+        pred_id = pred if pred != "(select)" else st.session_state.graph_pred
+        succ_id = succ if succ != "(select)" else st.session_state.graph_succ
+        if not pred_id or not succ_id:
+            st.error("Select predecessor and successor.")
+        else:
+            ok, msg = add_dependency_to_scheduler(
+                scheduler, pred_id, succ_id, rel_type, int(lag)
+            )
+            if ok:
+                st.success(msg)
+                st.session_state.calculated = False
+                st.session_state.graph_pred = None
+                st.session_state.graph_succ = None
+                st.rerun()
+            else:
+                st.error(msg)
+
+    if st.button("Clear Selection"):
+        st.session_state.graph_pred = None
+        st.session_state.graph_succ = None
+        st.rerun()
+
+
+def render_gantt_editor(scheduler: PDMScheduler) -> None:
+    try:
+        from streamlit_plotly_events import plotly_events
+    except Exception:
+        st.warning("streamlit-plotly-events is not installed. Add it to requirements.txt.")
+        return
+
+    st.caption("Click a bar to select. Adjust start or duration, then apply.")
+
+    fig = create_plotly_gantt(scheduler)
+    fig.update_layout(dragmode="select")
+    selected_points = plotly_events(
+        fig,
+        click_event=True,
+        hover_event=False,
+        select_event=False,
+        override_height=500,
+        override_width="100%",
+    )
+
+    if "gantt_selected_id" not in st.session_state:
+        st.session_state.gantt_selected_id = None
+
+    if selected_points:
+        point = selected_points[0]
+        custom = point.get("customdata") if isinstance(point, dict) else None
+        if custom:
+            st.session_state.gantt_selected_id = custom[0]
+
+    activity_ids = sorted(scheduler.activities.keys())
+    selected_id = st.selectbox(
+        "Selected activity",
+        options=["(select)"] + activity_ids,
+        index=0
+        if st.session_state.gantt_selected_id is None
+        else 1 + activity_ids.index(st.session_state.gantt_selected_id),
+        key="gantt_selected_select",
+    )
+
+    if selected_id == "(select)" and st.session_state.gantt_selected_id:
+        selected_id = st.session_state.gantt_selected_id
+
+    if not selected_id or selected_id == "(select)":
+        st.info("Select a task from the Gantt chart to edit.")
+        return
+
+    act = scheduler.activities[selected_id]
+    current_es = int(act.es or 0)
+    current_duration = int(act.duration)
+
+    col_a, col_b, col_c = st.columns([2, 2, 1])
+    with col_a:
+        new_start = st.number_input(
+            "Start (ES constraint)",
+            value=current_es,
+            step=1,
+            help="This sets a Start-No-Earlier-Than constraint.",
+        )
+    with col_b:
+        new_duration = st.number_input(
+            "Duration",
+            min_value=0,
+            value=current_duration,
+            step=1,
+        )
+    with col_c:
+        if st.button("Clear Constraint"):
+            act.constraint_es = None
+            scheduler.calculate()
+            st.session_state.calculated = True
+            st.rerun()
+
+    if st.button("Apply to Schedule", type="primary"):
+        act.duration = int(new_duration)
+        act.constraint_es = int(new_start)
+        scheduler.calculate()
+        st.session_state.calculated = True
+        st.success("Schedule updated.")
+        st.rerun()
+
+
 # =============================================================================
 # STREAMLIT APPLICATION
 # =============================================================================
@@ -236,34 +830,112 @@ def main():
     """Main Streamlit application."""
 
     st.set_page_config(
-        page_title="IPMA CPM/PDM Scheduler",
-        page_icon="📊",
+        page_title="CPM Studio",
+        page_icon="CPM",
         layout="wide",
         initial_sidebar_state="expanded"
     )
 
-    st.title("📊 IPMA ICB 4.0/4.1 CPM/PDM Project Scheduler")
-    st.markdown("""
-    **Precedence Diagramming Method (PDM) - Activity on Node**
+    st.markdown(
+        """
+        <style>
+        :root {
+            --cpm-bg: #f8f7f4;
+            --cpm-surface: #ffffff;
+            --cpm-ink: #1b1a17;
+            --cpm-muted: #66615a;
+            --cpm-accent: #c45f3d;
+            --cpm-accent-2: #2f5d50;
+            --cpm-border: #e3ded6;
+        }
+        .stApp {
+            background: radial-gradient(circle at 10% 0%, #f2ede7 0%, var(--cpm-bg) 45%, #f9f8f6 100%);
+        }
+        .cpm-hero {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+            padding: 20px 28px;
+            background: var(--cpm-surface);
+            border: 1px solid var(--cpm-border);
+            border-radius: 18px;
+            box-shadow: 0 12px 30px rgba(27, 26, 23, 0.08);
+        }
+        .cpm-hero h1 {
+            font-size: 28px;
+            margin: 0 0 6px 0;
+            color: var(--cpm-ink);
+        }
+        .cpm-hero p {
+            margin: 0;
+            color: var(--cpm-muted);
+            font-size: 14px;
+        }
+        .cpm-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            border: 1px solid var(--cpm-border);
+            background: #fbfaf7;
+            color: var(--cpm-muted);
+            font-size: 12px;
+            margin-right: 8px;
+        }
+        .cpm-metric {
+            padding: 16px;
+            border-radius: 14px;
+            border: 1px solid var(--cpm-border);
+            background: var(--cpm-surface);
+        }
+        .cpm-status {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--cpm-border);
+            font-size: 12px;
+            margin-right: 6px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    This application implements the standard CPM/PDM scheduling methodology as described in
-    IPMA International Competence Baseline (ICB) 4.0/4.1 for time management competence.
-    """)
+    st.markdown(
+        """
+        <div class="cpm-hero">
+            <div>
+                <h1>CPM Studio</h1>
+                <p>Professional PDM scheduling workspace with critical path analytics and visual planning.</p>
+                <div>
+                    <span class="cpm-chip">PDM Engine</span>
+                    <span class="cpm-chip">Multi-Relation Links</span>
+                    <span class="cpm-chip">Critical Paths</span>
+                </div>
+            </div>
+            <div style="text-align:right">
+                <div style="font-size:12px;color:#8a847c;">Workspace</div>
+                <div style="font-size:18px;font-weight:600;color:#1b1a17;">Default Portfolio</div>
+                <div style="font-size:12px;color:#8a847c;">Last sync: auto</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    # Initialize session state
     if 'scheduler' not in st.session_state:
         st.session_state.scheduler = PDMScheduler()
     if 'calculated' not in st.session_state:
         st.session_state.calculated = False
-    # Initialize predecessor list if not present
     if 'pred_list' not in st.session_state:
         st.session_state.pred_list = []
+
     scheduler = st.session_state.scheduler
-    if 'pred_list' not in st.session_state:
-        st.session_state.pred_list = []
-    # Sidebar for adding activities
+
     with st.sidebar:
-        st.header("Add Activity")
+        st.header("Create Activity")
 
         activity_id = st.text_input(
             "Activity ID",
@@ -278,6 +950,35 @@ def main():
             key="description_input"
         )
 
+        status = st.selectbox(
+            "Status",
+            options=STATUS_OPTIONS,
+            index=0,
+            key="status_input",
+        )
+
+        owner = st.text_input(
+            "Owner",
+            placeholder="e.g., Alex, PMO Team",
+            key="owner_input",
+        )
+
+        progress = st.slider(
+            "Progress %",
+            min_value=0,
+            max_value=100,
+            value=0,
+            step=5,
+            key="progress_input",
+        )
+
+        risk = st.selectbox(
+            "Risk",
+            options=RISK_OPTIONS,
+            index=0,
+            key="risk_input",
+        )
+
         duration = st.number_input(
             "Duration (days)",
             min_value=0,
@@ -288,10 +989,7 @@ def main():
 
         st.markdown("**Predecessors** (add multiple if needed)")
 
-        if 'pred_list' not in st.session_state:
-            st.session_state.pred_list = []
-
-        if st.button("➕ Add Predecessor", key="add_pred_btn"):
+        if st.button("Add Predecessor", key="add_pred_btn"):
             st.session_state.pred_list.append({"pred_id": "", "rel_type": "FS", "lag": 0})
             st.rerun()
 
@@ -324,10 +1022,9 @@ def main():
                     key=f"lag_{idx}"
                 )
             with cols[3]:
-                if st.button("🗑", key=f"remove_pred_{idx}"):
+                if st.button("Remove", key=f"remove_pred_{idx}"):
                     to_remove.append(idx)
 
-            # Update session state with current widget values (persists on rerun)
             if idx < len(st.session_state.pred_list):
                 st.session_state.pred_list[idx]["pred_id"] = selected_id
                 st.session_state.pred_list[idx]["rel_type"] = rel_type
@@ -336,7 +1033,6 @@ def main():
             if selected_id != "(none)":
                 predecessors.append(Relationship(selected_id, rel_type, int(lag)))
 
-        # Remove selected predecessors
         if to_remove:
             for idx in sorted(to_remove, reverse=True):
                 del st.session_state.pred_list[idx]
@@ -355,11 +1051,15 @@ def main():
                     activity_id,
                     description,
                     duration,
-                    pred_str
+                    pred_str,
+                    status,
+                    owner,
+                    progress,
+                    risk,
                 )
                 if success:
-                    st.success(f"Activity **{activity_id}** added successfully with {len(predecessors)} predecessor(s)!")
-                    st.session_state.pred_list = []  # Clear after add
+                    st.success(f"Activity {activity_id} added with {len(predecessors)} predecessor(s).")
+                    st.session_state.pred_list = []
                     st.session_state.calculated = False
                     st.rerun()
                 else:
@@ -389,12 +1089,10 @@ def main():
 
         st.divider()
 
-        # Sample project loader
         st.header("Sample Projects")
 
         if st.button("Load Sample Project", use_container_width=True):
             scheduler.clear()
-            # Add sample activities
             sample_activities = [
                 ("A", "Project Planning", 3, ""),
                 ("B", "Requirements Analysis", 5, "A:FS:0"),
@@ -407,50 +1105,200 @@ def main():
             ]
             for act_id, desc, dur, preds in sample_activities:
                 scheduler.add_activity(act_id, desc, dur, preds)
-            st.success("Sample project loaded!")
+            st.success("Sample project loaded.")
             st.session_state.calculated = False
             st.rerun()
 
         if st.button("Load Complex Sample (All Relations)", use_container_width=True):
             scheduler.clear()
-            # Add complex sample with all relationship types
             complex_activities = [
                 ("A", "Foundation Work", 5, ""),
-                ("B", "Parallel Prep Work", 3, "A:SS:2"),  # SS relationship
+                ("B", "Parallel Prep Work", 3, "A:SS:2"),
                 ("C", "Main Construction", 10, "A:FS:0;B:FS:0"),
-                ("D", "Finishing Work", 4, "C:FF:-2"),  # FF with negative lag (lead)
-                ("E", "Inspection", 2, "C:FS:0;D:SF:1"),  # SF relationship
+                ("D", "Finishing Work", 4, "C:FF:-2"),
+                ("E", "Inspection", 2, "C:FS:0;D:SF:1"),
                 ("F", "Final Review", 1, "E:FS:0"),
             ]
             for act_id, desc, dur, preds in complex_activities:
                 scheduler.add_activity(act_id, desc, dur, preds)
-            st.success("Complex sample loaded!")
+            st.success("Complex sample loaded.")
             st.session_state.calculated = False
             st.rerun()
 
         if st.button("Clear All Activities", use_container_width=True, type="secondary"):
             scheduler.clear()
             st.session_state.calculated = False
-            st.success("All activities cleared!")
+            st.success("All activities cleared.")
             st.rerun()
 
-    # Main content area
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([2.6, 1.2])
 
     with col1:
-        st.header("Activities")
+        st.header("Board")
 
         if scheduler.activities:
-            df = scheduler.get_activities_dataframe()
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            board_df = scheduler.get_activities_dataframe()
+        else:
+            board_df = pd.DataFrame(
+                columns=[
+                    "ID",
+                    "Description",
+                    "Status",
+                    "Owner",
+                    "Progress",
+                    "Risk",
+                    "Duration",
+                    "Predecessors",
+                ]
+            )
 
-            # Delete activity option
-            with st.expander("Remove Activity"):
-                act_to_remove = st.selectbox(
-                    "Select activity to remove",
-                    options=list(scheduler.activities.keys())
+        edit_mode = st.toggle("Edit mode", value=True, key="board_edit_mode")
+
+        if edit_mode:
+            edited_df = st.data_editor(
+                board_df,
+                use_container_width=True,
+                num_rows="dynamic",
+                hide_index=True,
+                column_config={
+                    "ID": st.column_config.TextColumn("ID", required=True),
+                    "Description": st.column_config.TextColumn("Description"),
+                    "Status": st.column_config.SelectboxColumn(
+                        "Status",
+                        options=STATUS_OPTIONS,
+                        required=True,
+                    ),
+                    "Owner": st.column_config.TextColumn("Owner"),
+                    "Progress": st.column_config.NumberColumn(
+                        "Progress",
+                        min_value=0,
+                        max_value=100,
+                        step=5,
+                    ),
+                    "Risk": st.column_config.SelectboxColumn(
+                        "Risk",
+                        options=RISK_OPTIONS,
+                        required=True,
+                    ),
+                    "Duration": st.column_config.NumberColumn("Duration", min_value=0, step=1),
+                    "Predecessors": st.column_config.TextColumn(
+                        "Predecessors",
+                        help="Format: A:FS:0;B:SS:2",
+                    ),
+                },
+                key="board_editor",
+            )
+        else:
+            legend_html = " ".join(
+                [
+                    f"<span class='cpm-status' style='background:{STATUS_COLORS[s]};'>{s}</span>"
+                    for s in STATUS_OPTIONS
+                ]
+            )
+            st.markdown(legend_html, unsafe_allow_html=True)
+            risk_html = " ".join(
+                [
+                    f"<span class='cpm-status' style='background:{RISK_COLORS[r]};'>Risk: {r}</span>"
+                    for r in RISK_OPTIONS
+                ]
+            )
+            st.markdown(risk_html, unsafe_allow_html=True)
+
+            filter_cols = st.columns([2, 2, 2, 1])
+            with filter_cols[0]:
+                status_filter = st.multiselect(
+                    "Status filter",
+                    options=STATUS_OPTIONS,
+                    default=STATUS_OPTIONS,
                 )
-                if st.button("Remove Selected Activity"):
+            with filter_cols[1]:
+                risk_filter = st.multiselect(
+                    "Risk filter",
+                    options=RISK_OPTIONS,
+                    default=RISK_OPTIONS,
+                )
+            with filter_cols[2]:
+                search_text = st.text_input("Search")
+            with filter_cols[3]:
+                critical_only = st.checkbox("Critical only", value=False)
+
+            view_df = board_df.copy()
+            if status_filter:
+                view_df = view_df[view_df["Status"].isin(status_filter)]
+            if risk_filter:
+                view_df = view_df[view_df["Risk"].isin(risk_filter)]
+            if search_text:
+                search_text_lower = search_text.lower()
+                id_series = view_df["ID"].fillna("").str.lower()
+                desc_series = view_df["Description"].fillna("").str.lower()
+                owner_series = view_df["Owner"].fillna("").str.lower()
+                view_df = view_df[
+                    id_series.str.contains(search_text_lower)
+                    | desc_series.str.contains(search_text_lower)
+                    | owner_series.str.contains(search_text_lower)
+                ]
+            if critical_only:
+                if st.session_state.calculated:
+                    critical_ids = [
+                        act.id for act in scheduler.activities.values() if act.is_critical
+                    ]
+                    view_df = view_df[view_df["ID"].isin(critical_ids)]
+                else:
+                    st.info("Run calculation to filter by critical activities.")
+
+            def status_style(value: str) -> str:
+                color = STATUS_COLORS.get(value, "#ffffff")
+                return f"background-color: {color}; color: #1b1a17;"
+
+            def risk_style(value: str) -> str:
+                color = RISK_COLORS.get(value, "#ffffff")
+                return f"background-color: {color}; color: #1b1a17;"
+
+            styled = (
+                view_df.style
+                .applymap(status_style, subset=["Status"])
+                .applymap(risk_style, subset=["Risk"])
+            )
+            st.dataframe(styled, use_container_width=True, hide_index=True)
+            edited_df = None
+
+        action_cols = st.columns([1, 1, 2])
+        with action_cols[0]:
+            if st.button("Apply Changes", type="primary", disabled=not edit_mode):
+                new_scheduler = PDMScheduler()
+                errors = []
+                for row in edited_df.to_dict("records"):
+                    act_id = str(row.get("ID", "") or "").strip().upper()
+                    if not act_id:
+                        continue
+                    description = str(row.get("Description", "") or "")
+                    owner = str(row.get("Owner", "") or "")
+                    duration = int(row.get("Duration", 0) or 0)
+                    predecessors = str(row.get("Predecessors", "") or "")
+                    status = str(row.get("Status", "") or "").strip() or "Not Started"
+                    progress = int(row.get("Progress", 0) or 0)
+                    risk = str(row.get("Risk", "") or "").strip() or "Low"
+                    ok, msg = new_scheduler.add_activity(
+                        act_id, description, duration, predecessors, status, owner, progress, risk
+                    )
+                    if not ok:
+                        errors.append(msg)
+                if errors:
+                    st.error("Cannot apply changes:\n" + "\n".join(errors))
+                else:
+                    st.session_state.scheduler = new_scheduler
+                    st.session_state.calculated = False
+                    st.success("Board updated.")
+                    st.rerun()
+
+        with action_cols[1]:
+            if scheduler.activities:
+                act_to_remove = st.selectbox(
+                    "Remove",
+                    options=list(scheduler.activities.keys()),
+                    label_visibility="collapsed",
+                )
+                if st.button("Delete Selected"):
                     success, message = scheduler.remove_activity(act_to_remove)
                     if success:
                         st.success(message)
@@ -458,15 +1306,18 @@ def main():
                         st.rerun()
                     else:
                         st.error(message)
-        else:
-            st.info("No activities added yet. Use the sidebar to add activities.")
+        with action_cols[2]:
+            st.caption("Tip: edit cells inline, then Apply Changes.")
 
     with col2:
-        st.header("Actions")
+        st.header("Insights")
 
-        if st.button("🔢 Calculate Critical Path & Floats",
-                    use_container_width=True, type="primary",
-                    disabled=len(scheduler.activities) == 0):
+        if st.button(
+            "Calculate Schedule",
+            use_container_width=True,
+            type="primary",
+            disabled=len(scheduler.activities) == 0,
+        ):
             success, message = scheduler.calculate()
             if success:
                 st.session_state.calculated = True
@@ -476,20 +1327,271 @@ def main():
 
         st.divider()
 
+        total_activities = len(scheduler.activities) if scheduler.activities else 0
+
+        st.markdown('<div class="cpm-metric">', unsafe_allow_html=True)
+        st.metric("Activities", f"{total_activities}")
         if st.session_state.calculated:
             st.metric("Project Duration", f"{scheduler.project_duration} days")
-            st.metric("Critical Activities",
-                     f"{sum(1 for a in scheduler.activities.values() if a.is_critical)}")
+            st.metric(
+                "Critical Activities",
+                f"{sum(1 for a in scheduler.activities.values() if a.is_critical)}",
+            )
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    # Results section
+        st.divider()
+        st.subheader("Details Drawer")
+
+        if scheduler.activities:
+            activity_ids = sorted(scheduler.activities.keys())
+            selected_id = st.selectbox(
+                "Select activity",
+                options=["(select)"] + activity_ids,
+                index=0,
+                key="details_select",
+            )
+
+            if selected_id != "(select)":
+                act = scheduler.activities[selected_id]
+
+                st.markdown(
+                    f"<span class='cpm-status' style='background:{STATUS_COLORS.get(act.status, '#f1f0ee')};'>"
+                    f"{act.status}</span>"
+                    f"<span class='cpm-status' style='background:{RISK_COLORS.get(act.risk, '#dcfce7')};'>"
+                    f"Risk: {act.risk}</span>",
+                    unsafe_allow_html=True,
+                )
+
+                with st.form("details_form"):
+                    description = st.text_input("Description", value=act.description)
+                    owner = st.text_input("Owner", value=act.owner)
+                    status = st.selectbox(
+                        "Status",
+                        options=STATUS_OPTIONS,
+                        index=STATUS_OPTIONS.index(act.status)
+                        if act.status in STATUS_OPTIONS
+                        else 0,
+                    )
+                    risk = st.selectbox(
+                        "Risk",
+                        options=RISK_OPTIONS,
+                        index=RISK_OPTIONS.index(act.risk)
+                        if act.risk in RISK_OPTIONS
+                        else 0,
+                    )
+                    progress = st.slider(
+                        "Progress %",
+                        min_value=0,
+                        max_value=100,
+                        value=int(act.progress),
+                        step=5,
+                    )
+                    duration = st.number_input(
+                        "Duration (days)",
+                        min_value=0,
+                        value=int(act.duration),
+                        step=1,
+                    )
+                    use_constraint = st.checkbox(
+                        "Use start constraint",
+                        value=act.constraint_es is not None,
+                    )
+                    constraint_value = st.number_input(
+                        "Start constraint (ES)",
+                        value=int(act.constraint_es or act.es or 0),
+                        step=1,
+                        disabled=not use_constraint,
+                    )
+                    recalc = st.checkbox(
+                        "Recalculate schedule after save",
+                        value=True,
+                    )
+
+                    save = st.form_submit_button("Save changes", type="primary")
+
+                if save:
+                    new_constraint = int(constraint_value) if use_constraint else None
+                    schedule_changed = (
+                        int(duration) != act.duration
+                        or new_constraint != act.constraint_es
+                    )
+                    act.description = description
+                    act.owner = owner or "Unassigned"
+                    act.status = status
+                    act.risk = risk
+                    act.progress = int(progress)
+                    act.duration = int(duration)
+                    act.constraint_es = new_constraint
+
+                    if schedule_changed:
+                        if recalc:
+                            scheduler.calculate()
+                            st.session_state.calculated = True
+                        else:
+                            st.session_state.calculated = False
+
+                    st.success("Activity updated.")
+                    st.rerun()
+
+                st.divider()
+                st.markdown("**Dependencies**")
+
+                if act.predecessors:
+                    pred_table = pd.DataFrame(
+                        [
+                            {
+                                "Predecessor": rel.predecessor_id,
+                                "Type": rel.relation_type,
+                                "Lag": rel.lag,
+                            }
+                            for rel in act.predecessors
+                        ]
+                    )
+                    st.dataframe(pred_table, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No predecessors defined.")
+
+                dep_cols = st.columns([3, 2, 2, 2])
+                with dep_cols[0]:
+                    pred_options = [aid for aid in activity_ids if aid != act.id]
+                    pred_select = st.selectbox(
+                        "Add predecessor",
+                        options=["(select)"] + pred_options,
+                        index=0,
+                        key=f"dep_pred_{act.id}",
+                    )
+                with dep_cols[1]:
+                    rel_select = st.selectbox(
+                        "Type",
+                        options=["FS", "SS", "FF", "SF"],
+                        key=f"dep_rel_{act.id}",
+                    )
+                with dep_cols[2]:
+                    lag_value = st.number_input(
+                        "Lag",
+                        value=0,
+                        step=1,
+                        key=f"dep_lag_{act.id}",
+                    )
+                with dep_cols[3]:
+                    recalc_after = st.checkbox(
+                        "Recalc",
+                        value=True,
+                        key=f"dep_recalc_{act.id}",
+                    )
+
+                dep_action_cols = st.columns([1, 1, 2])
+                with dep_action_cols[0]:
+                    if st.button("Add dependency", type="primary", key=f"dep_add_{act.id}"):
+                        if pred_select == "(select)":
+                            st.error("Select a predecessor.")
+                        else:
+                            ok, msg = add_dependency_to_scheduler(
+                                scheduler,
+                                pred_select,
+                                act.id,
+                                rel_select,
+                                int(lag_value),
+                            )
+                            if ok:
+                                if recalc_after:
+                                    scheduler.calculate()
+                                    st.session_state.calculated = True
+                                else:
+                                    st.session_state.calculated = False
+                                st.success("Dependency added.")
+                                st.rerun()
+                            else:
+                                st.error(msg)
+
+                with dep_action_cols[1]:
+                    removable = [str(rel) for rel in act.predecessors]
+                    if removable:
+                        remove_choice = st.selectbox(
+                            "Remove dependency",
+                            options=["(select)"] + removable,
+                            index=0,
+                            key=f"dep_remove_{act.id}",
+                        )
+                        if st.button("Remove selected", key=f"dep_remove_btn_{act.id}"):
+                            if remove_choice == "(select)":
+                                st.error("Choose a dependency to remove.")
+                            else:
+                                for rel in list(act.predecessors):
+                                    if str(rel) == remove_choice:
+                                        act.predecessors.remove(rel)
+                                        break
+                                if recalc_after:
+                                    scheduler.calculate()
+                                    st.session_state.calculated = True
+                                else:
+                                    st.session_state.calculated = False
+                                st.success("Dependency removed.")
+                                st.rerun()
+
+                st.divider()
+                st.markdown("**Suggestions**")
+                if not st.session_state.calculated:
+                    st.info("Run calculation to generate suggestions.")
+                else:
+                    tolerance = st.slider(
+                        "Suggestion tolerance (days)",
+                        min_value=0,
+                        max_value=5,
+                        value=2,
+                        step=1,
+                        key=f"suggest_tol_{act.id}",
+                    )
+                    suggestions = generate_dependency_suggestions(
+                        scheduler,
+                        act.id,
+                        tolerance=tolerance,
+                    )
+                    if not suggestions:
+                        st.info("No suggestions found with current tolerance.")
+                    else:
+                        for idx, suggestion in enumerate(suggestions, start=1):
+                            sug_cols = st.columns([3, 2, 1])
+                            with sug_cols[0]:
+                                label = (
+                                    f"{idx}. {suggestion['pred']} -> {act.id} "
+                                    f"({suggestion['type']} {suggestion['lag']:+d})"
+                                )
+                                if suggestion.get("critical_hint"):
+                                    label += "  * critical chain"
+                                st.write(label)
+                            with sug_cols[1]:
+                                st.caption(suggestion["reason"])
+                            with sug_cols[2]:
+                                if st.button(
+                                    "Add",
+                                    key=f"suggest_add_{act.id}_{idx}",
+                                ):
+                                    ok, msg = add_dependency_to_scheduler(
+                                        scheduler,
+                                        suggestion["pred"],
+                                        act.id,
+                                        suggestion["type"],
+                                        int(suggestion["lag"]),
+                                    )
+                                    if ok:
+                                        scheduler.calculate()
+                                        st.session_state.calculated = True
+                                        st.success("Dependency added from suggestion.")
+                                        st.rerun()
+                                    else:
+                                        st.error(msg)
+            else:
+                st.info("Select an activity to view and edit details.")
+        else:
+            st.info("Add activities to enable the details drawer.")
+
     if st.session_state.calculated and scheduler.activities:
         st.divider()
-        st.header("📈 Calculation Results")
+        st.header("Calculation Results")
 
-        # Results table
         results_df = scheduler.get_results_dataframe()
 
-        # Style the dataframe
         def highlight_critical(row):
             if row['Critical'] == 'Yes':
                 return ['background-color: #ffcccb'] * len(row)
@@ -498,13 +1600,24 @@ def main():
         styled_df = results_df.style.apply(highlight_critical, axis=1)
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-        # Critical path display
-        st.subheader("Critical Path")
-        critical_path_str = " → ".join(scheduler.critical_path)
-        st.markdown(f"**{critical_path_str}**")
+        st.subheader("Critical Paths")
+        if scheduler.critical_paths:
+            for idx, path in enumerate(scheduler.critical_paths, start=1):
+                st.markdown(f"**{idx}. {' -> '.join(path)}**")
+        else:
+            st.info("No critical path identified.")
 
-        # Tabs for visualizations and details
-        tab1, tab2, tab3 = st.tabs(["📊 Network Diagram", "📅 Gantt Chart", "📝 Calculation Details"])
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+            [
+                "Network Diagram",
+                "Gantt Chart",
+                "Interactive Gantt",
+                "Interactive Network",
+                "Graph Editor",
+                "Gantt Editor",
+                "Calculation Details",
+            ]
+        )
 
         with tab1:
             st.subheader("Network Diagram (PDM - Activity on Node)")
@@ -512,10 +1625,10 @@ def main():
             st.pyplot(fig)
             plt.close(fig)
 
-            st.caption("""
-            **Legend:** Red nodes = Critical activities | Blue nodes = Non-critical activities
-            Edge styles indicate relationship types: Solid=FS, Dashed=SS, Dotted=FF, Dashdot=SF
-            """)
+            st.caption(
+                "Legend: Red nodes = Critical activities | Blue nodes = Non-critical activities. "
+                "Edge styles: Solid=FS, Dashed=SS, Dotted=FF, Dashdot=SF."
+            )
 
         with tab2:
             st.subheader("Gantt Chart")
@@ -523,47 +1636,77 @@ def main():
             st.pyplot(fig)
             plt.close(fig)
 
-            st.caption("""
-            **Legend:** Red bars = Critical activities | Blue bars = Non-critical activities
-            Gray extensions show Total Float available for non-critical activities.
-            """)
+            st.caption(
+                "Legend: Red bars = Critical activities | Blue bars = Non-critical activities. "
+                "Gray extensions show Total Float available for non-critical activities."
+            )
 
         with tab3:
-            st.subheader("Detailed Calculation Log")
+            st.subheader("Interactive Gantt Timeline")
+            fig = create_plotly_gantt(scheduler)
+            st.plotly_chart(fig, use_container_width=True)
 
-            # Display calculation log
+        with tab4:
+            st.subheader("Interactive Network Diagram")
+            fig = create_plotly_network(scheduler)
+            st.plotly_chart(fig, use_container_width=True)
+
+        with tab5:
+            st.subheader("Graph Editor")
+            if scheduler.activities:
+                render_graph_editor(scheduler)
+            else:
+                st.info("Add activities first to edit dependencies.")
+
+        with tab6:
+            st.subheader("Gantt Editor")
+            if scheduler.activities:
+                render_gantt_editor(scheduler)
+            else:
+                st.info("Add activities first to edit the schedule.")
+
+        with tab7:
+            st.subheader("Detailed Calculation Log")
             log_text = "\n".join(scheduler.calculation_log)
             st.text_area("Calculation Steps", value=log_text, height=500, disabled=True)
 
-            # IPMA compliance note
-            st.info("""
-            **IPMA ICB 4.0/4.1 Compliance Note**
+            st.info(
+                "This calculation follows the standard PDM method with all four relationship types, "
+                "positive or negative lags, forward/backward passes, floats, and critical path detection."
+            )
 
-            This calculation follows the standard Precedence Diagramming Method (PDM) as recommended
-            by IPMA International Competence Baseline for the Time Management competence element.
+        st.divider()
+        st.header("Dependency Health")
+        if st.session_state.calculated:
+            health = compute_dependency_health(scheduler)
+            col_a, col_b, col_c, col_d = st.columns([1, 1, 1, 1])
+            with col_a:
+                st.metric("Health Score", f"{health['score']} / 100")
+            with col_b:
+                st.metric("Status", health["status"])
+            with col_c:
+                st.metric("Relations", f"{health['total_relations']}")
+            with col_d:
+                st.metric("Conflicts", f"{health['conflicts']}")
 
-            Key features implemented:
-            - All four precedence relationships (FS, SS, FF, SF) with positive/negative lags
-            - Forward pass calculating Early Start (ES) and Early Finish (EF)
-            - Backward pass calculating Late Start (LS) and Late Finish (LF)
-            - Total Float (TF) = LS - ES = LF - EF
-            - Free Float (FF) correctly calculated for each relationship type
-            - Critical Path identification (activities where TF = 0)
+            conflicts = analyze_dependency_conflicts(scheduler)
+            if conflicts.empty:
+                st.success("No dependency conflicts detected.")
+            else:
+                st.warning("Dependency conflicts detected.")
+                st.dataframe(conflicts, use_container_width=True, hide_index=True)
+        else:
+            st.info("Run calculation to evaluate dependency health.")
 
-            **Limitations:**
-            - Free Float calculation for complex networks with mixed relationship types
-              may require additional constraints in real-world scenarios.
-            - This implementation uses discrete integer time units (days).
-            """)
-
-    # Footer
     st.divider()
-    st.markdown("""
-    ---
-    **IPMA CPM/PDM Project Scheduler** | Precedence Diagramming Method | Activity-on-Node Format
+    st.markdown(
+        """
+        ---
+        **CPM Studio** | Precedence Diagramming Method | Activity-on-Node Format
 
-    *Implements standard CPM/PDM scheduling methodology as per IPMA ICB 4.0/4.1*
-    """)
+        *Professional CPM/PDM scheduling workspace.*
+        """
+    )
 
 
 if __name__ == "__main__":

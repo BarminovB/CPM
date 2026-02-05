@@ -42,6 +42,10 @@ class PDMScheduler:
         description: str,
         duration: int,
         predecessors_str: str = "",
+        status: str = "Not Started",
+        owner: str = "Unassigned",
+        progress: int = 0,
+        risk: str = "Low",
     ) -> Tuple[bool, str]:
         """
         Add an activity to the project.
@@ -104,10 +108,22 @@ class PDMScheduler:
 
                 predecessors.append(Relationship(pred_id, rel_type, lag))
 
+        status = status.strip() if status else "Not Started"
+        owner = owner.strip() if owner else "Unassigned"
+        try:
+            progress_value = int(progress)
+        except (TypeError, ValueError):
+            progress_value = 0
+        progress_value = max(0, min(100, progress_value))
+        risk = risk.strip() if risk else "Low"
         activity = Activity(
             id=activity_id,
             description=description,
             duration=duration,
+            status=status,
+            owner=owner,
+            progress=progress_value,
+            risk=risk,
             predecessors=predecessors,
         )
         self.activities[activity_id] = activity
@@ -316,7 +332,10 @@ class PDMScheduler:
 
             es_from_es = max(es_candidates) if es_candidates else None
             es_from_ef = max(ef_candidates) - act.duration if ef_candidates else None
-            candidate_values = [v for v in (es_from_es, es_from_ef) if v is not None]
+            constraint_es = act.constraint_es
+            candidate_values = [
+                v for v in (es_from_es, es_from_ef, constraint_es) if v is not None
+            ]
 
             if not candidate_values:
                 act.es = self.project_start
@@ -330,6 +349,10 @@ class PDMScheduler:
                 if act.ef < min_ef_from_constraints:
                     act.ef = min_ef_from_constraints
                     act.es = act.ef - act.duration
+
+            if act.constraint_es is not None and act.es < act.constraint_es:
+                act.es = act.constraint_es
+                act.ef = act.es + act.duration
 
             self._log(f"  -> ES = {act.es}")
             self._log(f"  -> EF = ES + Duration = {act.es} + {act.duration} = {act.ef}")
@@ -590,6 +613,10 @@ class PDMScheduler:
                 {
                     "ID": act_id,
                     "Description": act.description,
+                    "Status": act.status,
+                    "Owner": act.owner,
+                    "Progress": act.progress,
+                    "Risk": act.risk,
                     "Duration": act.duration,
                     "ES": act.es if act.es is not None else "-",
                     "EF": act.ef if act.ef is not None else "-",
@@ -597,6 +624,7 @@ class PDMScheduler:
                     "LF": act.lf if act.lf is not None else "-",
                     "TF": act.total_float if act.total_float is not None else "-",
                     "FF": act.free_float if act.free_float is not None else "-",
+                    "Constraint ES": act.constraint_es if act.constraint_es is not None else "-",
                     "Critical": "Yes" if act.is_critical else "No",
                 }
             )
@@ -612,6 +640,10 @@ class PDMScheduler:
                 {
                     "ID": act_id,
                     "Description": act.description,
+                    "Status": act.status,
+                    "Owner": act.owner,
+                    "Progress": act.progress,
+                    "Risk": act.risk,
                     "Duration": act.duration,
                     "Predecessors": pred_str,
                 }

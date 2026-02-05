@@ -24,6 +24,10 @@ class Activity:
     id: str
     description: str
     duration: int
+    status: str = "Not Started"
+    owner: str = "Unassigned"
+    progress: int = 0
+    risk: str = "Low"
     predecessors: List[Relationship] = field(default_factory=list)
 
     # Forward pass results
@@ -37,6 +41,9 @@ class Activity:
     # Float calculations
     total_float: Optional[int] = None  # Total Float (TF)
     free_float: Optional[int] = None   # Free Float (FF)
+
+    # Optional constraint: Start No Earlier Than (SNET) in schedule units
+    constraint_es: Optional[int] = None
 
     # Critical path flag
     is_critical: bool = False
