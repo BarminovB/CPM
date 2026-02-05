@@ -1278,6 +1278,90 @@ def main():
             border-color: var(--cpm-border);
             color: var(--cpm-ink);
             box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+            outline: none;
+            appearance: none;
+        }
+        [data-testid="stSidebar"] .stTextInput input:hover,
+        [data-testid="stSidebar"] .stNumberInput input:hover,
+        [data-testid="stSidebar"] .stTextArea textarea:hover,
+        [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div:hover {
+            border-color: color-mix(in srgb, var(--cpm-accent) 25%, var(--cpm-border) 75%);
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+        }
+        [data-testid="stSidebar"] .stTextInput input:focus,
+        [data-testid="stSidebar"] .stNumberInput input:focus,
+        [data-testid="stSidebar"] .stTextArea textarea:focus,
+        [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div:focus {
+            border-color: color-mix(in srgb, var(--cpm-accent) 55%, var(--cpm-border) 45%);
+            box-shadow: 0 0 0 4px color-mix(in srgb, var(--cpm-accent) 18%, transparent);
+        }
+        [data-testid="stSidebar"] .stTextInput input,
+        [data-testid="stSidebar"] .stNumberInput input {
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+        }
+        [data-testid="stNumberInput"] button {
+            background: var(--cpm-surface-2);
+            border: 1px solid var(--cpm-border);
+            border-radius: 10px;
+            box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+        }
+        [data-testid="stNumberInput"] div[data-baseweb="button-group"] {
+            background: var(--cpm-surface);
+            border-radius: 10px;
+            padding: 2px;
+        }
+        [data-testid="stNumberInput"] button svg {
+            color: var(--cpm-accent);
+            fill: var(--cpm-accent);
+        }
+        [data-testid="stNumberInput"] button:hover {
+            background: color-mix(in srgb, var(--cpm-accent) 10%, var(--cpm-surface-2) 90%);
+            border-color: color-mix(in srgb, var(--cpm-accent) 35%, var(--cpm-border) 65%);
+        }
+        [data-testid="stDataFrame"] th,
+        [data-testid="stDataFrame"] td,
+        [data-testid="stDataEditor"] th,
+        [data-testid="stDataEditor"] td {
+            background: var(--cpm-surface);
+            border-color: var(--cpm-border);
+        }
+        [data-testid="stDataFrame"] thead th,
+        [data-testid="stDataEditor"] thead th {
+            background: var(--cpm-surface-2);
+            color: var(--cpm-ink);
+        }
+        [data-testid="stDataFrame"] table,
+        [data-testid="stDataEditor"] table {
+            border-radius: var(--cpm-radius-sm);
+            overflow: hidden;
+        }
+        [data-testid="stDataFrame"] tbody tr:hover td,
+        [data-testid="stDataEditor"] tbody tr:hover td {
+            background: color-mix(in srgb, var(--cpm-accent) 6%, var(--cpm-surface) 94%);
+        }
+        [data-testid="stAlert"] {
+            background: color-mix(in srgb, var(--cpm-accent) 10%, var(--cpm-surface) 90%);
+            border-color: color-mix(in srgb, var(--cpm-accent) 25%, var(--cpm-border) 75%);
+        }
+        [data-testid="stAlert"] code {
+            background: color-mix(in srgb, var(--cpm-accent) 10%, var(--cpm-surface) 90%);
+            color: var(--cpm-ink);
+            border: 1px solid color-mix(in srgb, var(--cpm-accent) 25%, var(--cpm-border) 75%);
+            border-radius: 8px;
+            padding: 2px 6px;
+        }
+        [data-testid="stMarkdown"] code {
+            background: color-mix(in srgb, var(--cpm-accent) 10%, var(--cpm-surface) 90%);
+            color: var(--cpm-ink);
+            border: 1px solid color-mix(in srgb, var(--cpm-accent) 25%, var(--cpm-border) 75%);
+            border-radius: 8px;
+            padding: 2px 6px;
+        }
+        [data-testid="stMarkdown"] pre {
+            background: color-mix(in srgb, var(--cpm-accent) 6%, var(--cpm-surface) 94%);
+            border-radius: 12px;
+            border: 1px solid color-mix(in srgb, var(--cpm-border) 65%, transparent);
+            padding: 12px;
         }
         </style>
         """
@@ -2027,7 +2111,7 @@ def main():
             key="gantt_scale",
         )
         gantt_fig = create_plotly_gantt(scheduler, scale=gantt_scale)
-        st.plotly_chart(gantt_fig, use_container_width=True)
+        st.plotly_chart(gantt_fig, use_container_width=True, key="gantt_overview")
         st.markdown("</div>", unsafe_allow_html=True)
 
         tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
@@ -2070,12 +2154,12 @@ def main():
                 scheduler,
                 scale=st.session_state.get("gantt_scale", "Day"),
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, key="gantt_tab_interactive")
 
         with tab4:
             st.subheader("Interactive Network Diagram")
             fig = create_plotly_network(scheduler)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, key="network_tab_interactive")
 
         with tab5:
             st.subheader("Graph Editor")
