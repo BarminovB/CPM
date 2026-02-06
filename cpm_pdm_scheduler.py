@@ -1840,9 +1840,7 @@ def main():
                     if not ok:
                         errors.append(msg)
                 if errors:
-                    st.error("Cannot apply changes:
-" + "
-".join(errors))
+                    st.error("Cannot apply changes:\n" + "\n".join(errors))
                 else:
                     st.session_state.scheduler = new_scheduler
                     st.session_state.calculated = False
