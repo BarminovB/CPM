@@ -1459,6 +1459,28 @@ def main():
 
     scheduler = st.session_state.scheduler
 
+    def _is_missing(value: object) -> bool:
+        try:
+            return value is None or pd.isna(value)
+        except Exception:
+            return False
+
+    def _safe_str(value: object) -> str:
+        if _is_missing(value):
+            return ""
+        return str(value).strip()
+
+    def _safe_int(value: object, default: int = 0) -> int:
+        if _is_missing(value):
+            return default
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            try:
+                return int(float(value))
+            except (TypeError, ValueError):
+                return default
+
     with st.sidebar:
         st.subheader("Create Activity")
 
@@ -1655,6 +1677,107 @@ def main():
                 st.success("All activities cleared.")
                 st.rerun()
 
+        with st.expander("Import / Export", expanded=False):
+            st.caption("CSV columns: ID, Description, Status, Owner, Progress, Risk, Duration, Predecessors")
+
+            export_df = scheduler.get_activities_dataframe()
+            csv_data = export_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "Export CSV",
+                data=csv_data,
+                file_name="cpm_project.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+
+            uploaded_file = st.file_uploader("Import CSV", type=["csv"], key="import_csv")
+            replace_current = st.checkbox(
+                "Replace current project",
+                value=False,
+                key="import_replace",
+            )
+
+            if st.button("Import CSV", use_container_width=True, key="import_btn"):
+                if uploaded_file is None:
+                    st.warning("Choose a CSV file to import.")
+                else:
+                    try:
+                        df = pd.read_csv(uploaded_file)
+                    except Exception as exc:
+                        st.error(f"Failed to read CSV: {exc}")
+                    else:
+                        if df.empty:
+                            st.error("CSV file is empty.")
+                        else:
+                            df.columns = [str(c).strip().lower() for c in df.columns]
+                            required_cols = {"id", "duration"}
+                            missing = required_cols - set(df.columns)
+                            if missing:
+                                st.error(
+                                    "Missing required columns: "
+                                    + ", ".join(sorted(missing))
+                                )
+                            else:
+                                def load_df_into(
+                                    scheduler_obj: PDMScheduler,
+                                    frame: pd.DataFrame,
+                                    label: str,
+                                ) -> tuple[int, list[str]]:
+                                    errors: list[str] = []
+                                    count = 0
+                                    for idx, row in frame.iterrows():
+                                        act_id = _safe_str(row.get("id")).upper()
+                                        if not act_id:
+                                            errors.append(f"{label} row {idx+1}: Missing ID.")
+                                            continue
+                                        description = _safe_str(row.get("description"))
+                                        owner = _safe_str(row.get("owner"))
+                                        duration = _safe_int(row.get("duration"), default=0)
+                                        predecessors = _safe_str(row.get("predecessors"))
+                                        if predecessors and re.fullmatch(r"[-\u2013\u2014]+", predecessors):
+                                            predecessors = ""
+                                        status = _safe_str(row.get("status")) or "Not Started"
+                                        if status not in STATUS_OPTIONS:
+                                            status = "Not Started"
+                                        progress = _safe_int(row.get("progress"), default=0)
+                                        risk = _safe_str(row.get("risk")) or "Low"
+                                        if risk not in RISK_OPTIONS:
+                                            risk = "Low"
+                                        ok, msg = scheduler_obj.add_activity(
+                                            act_id,
+                                            description,
+                                            duration,
+                                            predecessors,
+                                            status,
+                                            owner,
+                                            progress,
+                                            risk,
+                                        )
+                                        if not ok:
+                                            errors.append(f"{label} row {idx+1}: {msg}")
+                                        else:
+                                            count += 1
+                                    return count, errors
+
+                                new_scheduler = PDMScheduler()
+                                errors: list[str] = []
+                                if not replace_current and scheduler.activities:
+                                    base_df = scheduler.get_activities_dataframe()
+                                    base_df.columns = [str(c).strip().lower() for c in base_df.columns]
+                                    _, base_errors = load_df_into(new_scheduler, base_df, "Existing")
+                                    errors.extend(base_errors)
+
+                                imported_count, import_errors = load_df_into(new_scheduler, df, "Import")
+                                errors.extend(import_errors)
+
+                                if errors:
+                                    st.error("Import failed:\n" + "\n".join(errors))
+                                else:
+                                    st.session_state.scheduler = new_scheduler
+                                    st.session_state.calculated = False
+                                    st.success(f"Imported {imported_count} activities.")
+                                    st.rerun()
+
     col1, col2 = st.columns([2.4, 1.4])
 
     with col1:
@@ -1792,25 +1915,6 @@ def main():
             st.dataframe(styled, use_container_width=True, hide_index=True)
             edited_df = None
 
-
-        def _is_missing(value: object) -> bool:
-            try:
-                return value is None or pd.isna(value)
-            except Exception:
-                return False
-
-        def _safe_str(value: object) -> str:
-            if _is_missing(value):
-                return ""
-            return str(value).strip()
-
-        def _safe_int(value: object, default: int = 0) -> int:
-            if _is_missing(value):
-                return default
-            try:
-                return int(value)
-            except (TypeError, ValueError):
-                return default
 
         action_cols = st.columns([1, 1, 2])
         with action_cols[0]:
