@@ -972,7 +972,7 @@ def main():
         st.session_state.theme_choice = "Warm Clay"
 
     with st.sidebar:
-        st.markdown("### Appearance")
+        st.subheader("Appearance")
         theme_choice = st.selectbox(
             "Theme",
             options=list(THEMES.keys()),
@@ -1460,7 +1460,7 @@ def main():
     scheduler = st.session_state.scheduler
 
     with st.sidebar:
-        st.header("Create Activity")
+        st.subheader("Create Activity")
 
         st.markdown("<div class='cpm-focus-trail'>", unsafe_allow_html=True)
         activity_id = st.text_input(
@@ -1594,74 +1594,75 @@ def main():
 
         st.divider()
 
-        st.header("Predecessor Format Guide")
-        st.markdown("""
-        **Relationship Types:**
-        - `FS` - Finish-to-Start (default)
-        - `SS` - Start-to-Start
-        - `FF` - Finish-to-Finish
-        - `SF` - Start-to-Finish
+        with st.expander("Predecessor Format Guide", expanded=False):
+            st.markdown("""
+            **Relationship Types:**
+            - `FS` - Finish-to-Start (default)
+            - `SS` - Start-to-Start
+            - `FF` - Finish-to-Finish
+            - `SF` - Start-to-Finish
 
-        **Format:** `ID:TYPE:LAG`
+            **Format:** `ID:TYPE:LAG`
 
-        **Examples:**
-        - `A:FS:0` - Start after A finishes
-        - `B:SS:5` - Start 5 days after B starts
-        - `C:FF:-3` - Finish 3 days before C finishes (lead)
-        - `D:SF:2` - Finish 2 days after D starts
+            **Examples:**
+            - `A:FS:0` - Start after A finishes
+            - `B:SS:5` - Start 5 days after B starts
+            - `C:FF:-3` - Finish 3 days before C finishes (lead)
+            - `D:SF:2` - Finish 2 days after D starts
 
-        **Multiple predecessors:** Separate with semicolons
-        `A:FS:0;B:SS:5;C:FF:-3`
-        """)
+            **Multiple predecessors:** Separate with semicolons
+            `A:FS:0;B:SS:5;C:FF:-3`
+            """)
 
-        st.divider()
+        with st.expander("Sample Projects", expanded=False):
+            if st.button("Load Sample Project", use_container_width=True):
+                scheduler.clear()
+                sample_activities = [
+                    ("A", "Project Planning", 3, ""),
+                    ("B", "Requirements Analysis", 5, "A:FS:0"),
+                    ("C", "Design", 4, "B:FS:0"),
+                    ("D", "Development Phase 1", 8, "C:FS:0"),
+                    ("E", "Development Phase 2", 6, "C:FS:0;D:SS:2"),
+                    ("F", "Testing", 5, "D:FS:0;E:FF:0"),
+                    ("G", "Documentation", 3, "D:FS:0"),
+                    ("H", "Deployment", 2, "F:FS:0;G:FS:0"),
+                ]
+                for act_id, desc, dur, preds in sample_activities:
+                    scheduler.add_activity(act_id, desc, dur, preds)
+                st.success("Sample project loaded.")
+                st.session_state.calculated = False
+                st.rerun()
 
-        st.header("Sample Projects")
+            if st.button("Load Complex Sample (All Relations)", use_container_width=True):
+                scheduler.clear()
+                complex_activities = [
+                    ("A", "Foundation Work", 5, ""),
+                    ("B", "Parallel Prep Work", 3, "A:SS:2"),
+                    ("C", "Main Construction", 10, "A:FS:0;B:FS:0"),
+                    ("D", "Finishing Work", 4, "C:FF:-2"),
+                    ("E", "Inspection", 2, "C:FS:0;D:SF:1"),
+                    ("F", "Final Review", 1, "E:FS:0"),
+                ]
+                for act_id, desc, dur, preds in complex_activities:
+                    scheduler.add_activity(act_id, desc, dur, preds)
+                st.success("Complex sample loaded.")
+                st.session_state.calculated = False
+                st.rerun()
 
-        if st.button("Load Sample Project", use_container_width=True):
-            scheduler.clear()
-            sample_activities = [
-                ("A", "Project Planning", 3, ""),
-                ("B", "Requirements Analysis", 5, "A:FS:0"),
-                ("C", "Design", 4, "B:FS:0"),
-                ("D", "Development Phase 1", 8, "C:FS:0"),
-                ("E", "Development Phase 2", 6, "C:FS:0;D:SS:2"),
-                ("F", "Testing", 5, "D:FS:0;E:FF:0"),
-                ("G", "Documentation", 3, "D:FS:0"),
-                ("H", "Deployment", 2, "F:FS:0;G:FS:0"),
-            ]
-            for act_id, desc, dur, preds in sample_activities:
-                scheduler.add_activity(act_id, desc, dur, preds)
-            st.success("Sample project loaded.")
-            st.session_state.calculated = False
-            st.rerun()
+            if st.button("Clear All Activities", use_container_width=True, type="secondary"):
+                scheduler.clear()
+                st.session_state.calculated = False
+                st.success("All activities cleared.")
+                st.rerun()
 
-        if st.button("Load Complex Sample (All Relations)", use_container_width=True):
-            scheduler.clear()
-            complex_activities = [
-                ("A", "Foundation Work", 5, ""),
-                ("B", "Parallel Prep Work", 3, "A:SS:2"),
-                ("C", "Main Construction", 10, "A:FS:0;B:FS:0"),
-                ("D", "Finishing Work", 4, "C:FF:-2"),
-                ("E", "Inspection", 2, "C:FS:0;D:SF:1"),
-                ("F", "Final Review", 1, "E:FS:0"),
-            ]
-            for act_id, desc, dur, preds in complex_activities:
-                scheduler.add_activity(act_id, desc, dur, preds)
-            st.success("Complex sample loaded.")
-            st.session_state.calculated = False
-            st.rerun()
-
-        if st.button("Clear All Activities", use_container_width=True, type="secondary"):
-            scheduler.clear()
-            st.session_state.calculated = False
-            st.success("All activities cleared.")
-            st.rerun()
-
-    col1, col2 = st.columns([2.6, 1.2])
+    col1, col2 = st.columns([2.4, 1.4])
 
     with col1:
-        st.header("Board")
+        board_head = st.columns([3, 1])
+        with board_head[0]:
+            st.header("Board")
+        with board_head[1]:
+            edit_mode = st.toggle("Edit mode", value=True, key="board_edit_mode")
 
         if scheduler.activities:
             board_df = scheduler.get_activities_dataframe()
@@ -1678,8 +1679,6 @@ def main():
                     "Predecessors",
                 ]
             )
-
-        edit_mode = st.toggle("Edit mode", value=True, key="board_edit_mode")
 
         if edit_mode:
             st.markdown("<div class='cpm-focus-trail'>", unsafe_allow_html=True)
@@ -1793,31 +1792,57 @@ def main():
             st.dataframe(styled, use_container_width=True, hide_index=True)
             edited_df = None
 
+
+        def _is_missing(value: object) -> bool:
+            try:
+                return value is None or pd.isna(value)
+            except Exception:
+                return False
+
+        def _safe_str(value: object) -> str:
+            if _is_missing(value):
+                return ""
+            return str(value).strip()
+
+        def _safe_int(value: object, default: int = 0) -> int:
+            if _is_missing(value):
+                return default
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return default
+
         action_cols = st.columns([1, 1, 2])
         with action_cols[0]:
             if st.button("Apply Changes", type="primary", disabled=not edit_mode):
                 new_scheduler = PDMScheduler()
                 errors = []
                 for row in edited_df.to_dict("records"):
-                    act_id = str(row.get("ID", "") or "").strip().upper()
+                    act_id = _safe_str(row.get("ID")).upper()
                     if not act_id:
                         continue
-                    description = str(row.get("Description", "") or "")
-                    owner = str(row.get("Owner", "") or "")
-                    duration = int(row.get("Duration", 0) or 0)
-                    predecessors = str(row.get("Predecessors", "") or "").strip()
-                    if predecessors in {"-", "—"}:
+                    description = _safe_str(row.get("Description"))
+                    owner = _safe_str(row.get("Owner"))
+                    duration = _safe_int(row.get("Duration"), default=0)
+                    predecessors = _safe_str(row.get("Predecessors"))
+                    if predecessors and re.fullmatch(r"[-\u2013\u2014]+", predecessors):
                         predecessors = ""
-                    status = str(row.get("Status", "") or "").strip() or "Not Started"
-                    progress = int(row.get("Progress", 0) or 0)
-                    risk = str(row.get("Risk", "") or "").strip() or "Low"
+                    status = _safe_str(row.get("Status")) or "Not Started"
+                    if status not in STATUS_OPTIONS:
+                        status = "Not Started"
+                    progress = _safe_int(row.get("Progress"), default=0)
+                    risk = _safe_str(row.get("Risk")) or "Low"
+                    if risk not in RISK_OPTIONS:
+                        risk = "Low"
                     ok, msg = new_scheduler.add_activity(
                         act_id, description, duration, predecessors, status, owner, progress, risk
                     )
                     if not ok:
                         errors.append(msg)
                 if errors:
-                    st.error("Cannot apply changes:\n" + "\n".join(errors))
+                    st.error("Cannot apply changes:
+" + "
+".join(errors))
                 else:
                     st.session_state.scheduler = new_scheduler
                     st.session_state.calculated = False
@@ -1845,6 +1870,7 @@ def main():
     with col2:
         st.header("Insights")
 
+        st.markdown("<div class='cpm-glass cpm-fade-in'>", unsafe_allow_html=True)
         if st.button(
             "Calculate Schedule",
             use_container_width=True,
@@ -1858,8 +1884,6 @@ def main():
             else:
                 st.error(message)
 
-        st.divider()
-
         total_activities = len(scheduler.activities) if scheduler.activities else 0
 
         st.markdown('<div class="cpm-metric">', unsafe_allow_html=True)
@@ -1871,9 +1895,11 @@ def main():
                 f"{sum(1 for a in scheduler.activities.values() if a.is_critical)}",
             )
         st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        st.divider()
+        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
         st.subheader("Details Drawer")
+        st.markdown("<div class='cpm-glass cpm-fade-in'>", unsafe_allow_html=True)
 
         if scheduler.activities:
             activity_ids = sorted(scheduler.activities.keys())
@@ -2124,6 +2150,7 @@ def main():
         if not st.session_state.calculated:
             st.caption("Schedule preview will appear after calculation.")
             st.markdown("<div class='cpm-shimmer'></div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     if st.session_state.calculated and scheduler.activities:
         st.divider()

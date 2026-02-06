@@ -75,38 +75,9 @@ class PDMScheduler:
         if duration < 0:
             return False, "Duration must be non-negative."
 
-        predecessors: List[Relationship] = []
-        if predecessors_str.strip():
-            for pred_def in predecessors_str.split(";"):
-                pred_def = pred_def.strip()
-                if not pred_def:
-                    continue
-
-                parts = pred_def.split(":")
-                if len(parts) != 3:
-                    return (
-                        False,
-                        f"Invalid predecessor format: '{pred_def}'. Use format 'ID:TYPE:LAG' (e.g., 'A:FS:0').",
-                    )
-
-                pred_id = parts[0].strip().upper()
-                rel_type = parts[1].strip().upper()
-
-                try:
-                    lag = int(parts[2].strip())
-                except ValueError:
-                    return False, f"Invalid lag value in '{pred_def}'. Lag must be an integer."
-
-                if rel_type not in self.VALID_RELATIONS:
-                    return (
-                        False,
-                        f"Invalid relationship type '{rel_type}'. Must be one of: FS, SS, FF, SF.",
-                    )
-
-                if pred_id == activity_id:
-                    return False, "An activity cannot be its own predecessor."
-
-                predecessors.append(Relationship(pred_id, rel_type, lag))
+        predecessors, parse_error = self._parse_predecessors(predecessors_str, activity_id)
+        if parse_error:
+            return False, parse_error
 
         status = status.strip() if status else "Not Started"
         owner = owner.strip() if owner else "Unassigned"
@@ -129,6 +100,58 @@ class PDMScheduler:
         self.activities[activity_id] = activity
 
         return True, f"Activity '{activity_id}' added successfully."
+
+    def _parse_predecessors(
+        self, predecessors_str: str, activity_id: str
+    ) -> Tuple[List[Relationship], Optional[str]]:
+        predecessors: List[Relationship] = []
+        if not predecessors_str or not predecessors_str.strip():
+            return predecessors, None
+
+        seen: set[tuple[str, str, int]] = set()
+        for pred_def in re.split(r"[;,]", predecessors_str):
+            pred_def = pred_def.strip()
+            if not pred_def or pred_def in {"-", "—"}:
+                continue
+
+            parts = [p.strip() for p in pred_def.split(":")]
+            if len(parts) != 3:
+                return (
+                    [],
+                    f"Invalid predecessor format: '{pred_def}'. Use format 'ID:TYPE:LAG' (e.g., 'A:FS:0').",
+                )
+
+            pred_id = parts[0].upper()
+            rel_type = parts[1].upper()
+            lag_raw = parts[2]
+
+            if not pred_id or not re.match(r"^[A-Z][A-Z0-9_]*$", pred_id):
+                return (
+                    [],
+                    f"Invalid predecessor ID '{pred_id}'. Use letters/numbers/underscores and start with a letter.",
+                )
+
+            try:
+                lag = int(lag_raw)
+            except ValueError:
+                return [], f"Invalid lag value in '{pred_def}'. Lag must be an integer."
+
+            if rel_type not in self.VALID_RELATIONS:
+                return (
+                    [],
+                    f"Invalid relationship type '{rel_type}'. Must be one of: FS, SS, FF, SF.",
+                )
+
+            if pred_id == activity_id:
+                return [], "An activity cannot be its own predecessor."
+
+            key = (pred_id, rel_type, lag)
+            if key in seen:
+                continue
+            seen.add(key)
+            predecessors.append(Relationship(pred_id, rel_type, lag))
+
+        return predecessors, None
 
     def remove_activity(self, activity_id: str) -> Tuple[bool, str]:
         """Remove an activity from the project."""
