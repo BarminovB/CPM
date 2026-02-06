@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import re
 
 import pandas as pd
@@ -28,6 +28,83 @@ class PDMScheduler:
         self.normalize_to_zero = normalize_to_zero
         self.project_start = project_start
         self.project_name = "Default Portfolio"
+
+    def get_resource_load(self) -> Dict[str, Dict[int, int]]:
+        """
+        Calculate daily resource load (duration overlap) for each owner.
+        Returns a dict: {owner: {day: load_count}}
+        """
+        load = defaultdict(lambda: defaultdict(int))
+        for act in self.activities.values():
+            if act.es is None or act.ef is None:
+                continue
+            for day in range(int(act.es), int(act.ef)):
+                load[act.owner][day] += 1
+        # Convert to normal dicts for serialization if needed
+        return {k: dict(v) for k, v in load.items()}
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert scheduler state to a serializable dictionary."""
+        return {
+            "project_name": self.project_name,
+            "project_start": self.project_start,
+            "normalize_to_zero": self.normalize_to_zero,
+            "activities": [
+                {
+                    "id": act.id,
+                    "description": act.description,
+                    "duration": act.duration,
+                    "status": act.status,
+                    "owner": act.owner,
+                    "progress": act.progress,
+                    "risk": act.risk,
+                    "predecessors": [str(p) for p in act.predecessors],
+                    "constraint_es": act.constraint_es,
+                    "es": act.es,
+                    "ef": act.ef,
+                    "ls": act.ls,
+                    "lf": act.lf,
+                    "total_float": act.total_float,
+                    "free_float": act.free_float,
+                    "is_critical": act.is_critical
+                }
+                for act in self.activities.values()
+            ],
+            "critical_paths": self.critical_paths
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> PDMScheduler:
+        """Create a scheduler instance from a dictionary."""
+        scheduler = cls(
+            normalize_to_zero=data.get("normalize_to_zero", True),
+            project_start=data.get("project_start", 0)
+        )
+        scheduler.project_name = data.get("project_name", "Default Portfolio")
+        for act_data in data.get("activities", []):
+            scheduler.add_activity(
+                activity_id=act_data["id"],
+                description=act_data["description"],
+                duration=act_data["duration"],
+                predecessors_str=";".join(act_data.get("predecessors", [])),
+                status=act_data.get("status", "Not Started"),
+                owner=act_data.get("owner", "Unassigned"),
+                progress=act_data.get("progress", 0),
+                risk=act_data.get("risk", "Low")
+            )
+            # Restore calculated fields
+            act = scheduler.activities[act_data["id"].upper()]
+            act.constraint_es = act_data.get("constraint_es")
+            act.es = act_data.get("es")
+            act.ef = act_data.get("ef")
+            act.ls = act_data.get("ls")
+            act.lf = act_data.get("lf")
+            act.total_float = act_data.get("total_float")
+            act.free_float = act_data.get("free_float")
+            act.is_critical = act_data.get("is_critical", False)
+        
+        scheduler.critical_paths = data.get("critical_paths", [])
+        return scheduler
 
     def clear(self) -> None:
         """Clear all activities and calculations."""
