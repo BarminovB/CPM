@@ -1303,6 +1303,15 @@ def main():
             outline: none;
             appearance: none;
         }
+        [data-testid="stSidebar"] div[data-baseweb="input"] > div,
+        [data-testid="stSidebar"] div[data-baseweb="input"] input,
+        [data-testid="stSidebar"] div[data-baseweb="textarea"] > div,
+        [data-testid="stSidebar"] div[data-baseweb="textarea"] textarea {
+            border: 1px solid var(--cpm-border) !important;
+            background: var(--cpm-surface) !important;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08) !important;
+            outline: none !important;
+        }
         [data-testid="stSidebar"] .stTextInput input:hover,
         [data-testid="stSidebar"] .stNumberInput input:hover,
         [data-testid="stSidebar"] .stTextArea textarea:hover,
@@ -1316,6 +1325,13 @@ def main():
         [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div:focus {
             border-color: color-mix(in srgb, var(--cpm-accent) 55%, var(--cpm-border) 45%);
             box-shadow: 0 0 0 4px color-mix(in srgb, var(--cpm-accent) 18%, transparent);
+        }
+        [data-testid="stSidebar"] div[data-baseweb="input"]:focus-within > div,
+        [data-testid="stSidebar"] div[data-baseweb="input"]:focus-within input,
+        [data-testid="stSidebar"] div[data-baseweb="textarea"]:focus-within > div,
+        [data-testid="stSidebar"] div[data-baseweb="textarea"]:focus-within textarea {
+            border-color: color-mix(in srgb, var(--cpm-accent) 55%, var(--cpm-border) 45%) !important;
+            box-shadow: 0 0 0 4px color-mix(in srgb, var(--cpm-accent) 18%, transparent) !important;
         }
         [data-testid="stSidebar"] .stTextInput input,
         [data-testid="stSidebar"] .stNumberInput input {
