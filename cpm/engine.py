@@ -27,6 +27,7 @@ class PDMScheduler:
         self.critical_paths: List[List[str]] = []
         self.normalize_to_zero = normalize_to_zero
         self.project_start = project_start
+        self.project_name = "Default Portfolio"
 
     def clear(self) -> None:
         """Clear all activities and calculations."""

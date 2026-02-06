@@ -200,8 +200,13 @@ def create_network_diagram(scheduler: PDMScheduler) -> plt.Figure:
             G.add_edge(pred_rel.predecessor_id, act_id, label=label,
                       rel_type=pred_rel.relation_type, lag=pred_rel.lag)
 
-    # Create figure
-    fig, ax = plt.subplots(figsize=(14, 10))
+    # Create figure with dynamic size based on number of nodes
+    # Base size 12x8, add more height/width for complex graphs
+    num_nodes = len(G.nodes())
+    dynamic_width = max(14, int(num_nodes * 0.8))
+    dynamic_height = max(10, int(num_nodes * 0.5))
+    
+    fig, ax = plt.subplots(figsize=(dynamic_width, dynamic_height))
 
     # Calculate layout
     try:
@@ -216,7 +221,8 @@ def create_network_diagram(scheduler: PDMScheduler) -> plt.Figure:
             for node in G.nodes():
                 act = scheduler.activities[node]
                 if act.es is not None:
-                    pos[node] = (act.es * 2, pos[node][1])
+                    # Increased horizontal spacing: 2 -> 3
+                    pos[node] = (act.es * 3, pos[node][1])
 
     # Draw edges with different styles based on relationship type
     edge_colors = {
@@ -276,7 +282,8 @@ def create_network_diagram(scheduler: PDMScheduler) -> plt.Figure:
         plt.Line2D([0], [0], color=ACTIVE_THEME["edge_ff"], linewidth=2, linestyle='dotted', label='FF (Finish-to-Finish)'),
         plt.Line2D([0], [0], color=ACTIVE_THEME["edge_sf"], linewidth=2, linestyle='dashdot', label='SF (Start-to-Finish)'),
     ]
-    ax.legend(handles=legend_elements, loc='upper left', fontsize=8)
+    # Move legend outside to the right
+    ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1.02, 1), fontsize=8, facecolor='white', frameon=True)
 
     ax.set_title('Project Network Diagram (PDM - Activity on Node)', fontsize=14, fontweight='bold')
     ax.axis('off')
@@ -1667,7 +1674,7 @@ def main():
             </div>
             <div style="text-align:right">
                 <div style="font-size:12px;color:var(--cpm-muted);">Workspace</div>
-                <div style="font-size:18px;font-weight:600;color:var(--cpm-ink);">Default Portfolio</div>
+                <div style="font-size:18px;font-weight:600;color:var(--cpm-ink);">{scheduler.project_name}</div>
                 <div style="font-size:12px;color:var(--cpm-muted);">Last sync: auto</div>
             </div>
         </div>
@@ -1683,6 +1690,9 @@ def main():
         st.session_state.pred_list = []
 
     scheduler = st.session_state.scheduler
+    # Safety check for migration/session state persistence
+    if not hasattr(scheduler, 'project_name'):
+        scheduler.project_name = "Default Portfolio"
 
     def _is_missing(value: object) -> bool:
         try:
@@ -1707,6 +1717,13 @@ def main():
                 return default
 
     with st.sidebar:
+        st.subheader("Project Settings")
+        scheduler.project_name = st.text_input(
+            "Project Name",
+            value=scheduler.project_name,
+            key="project_name_input"
+        )
+        st.divider()
         st.subheader("Create Activity")
 
         st.markdown("<div class='cpm-focus-trail'>", unsafe_allow_html=True)
@@ -1906,11 +1923,14 @@ def main():
             st.caption("CSV columns: ID, Description, Status, Owner, Progress, Risk, Duration, Predecessors")
 
             export_df = scheduler.get_activities_dataframe()
+            # Add project name to export
+            export_df.insert(0, "Project Name", scheduler.project_name)
+            
             csv_data = export_df.to_csv(index=False).encode("utf-8")
             st.download_button(
                 "Export CSV",
                 data=csv_data,
-                file_name="cpm_project.csv",
+                file_name=f"{scheduler.project_name.replace(' ', '_').lower()}_project.csv",
                 mime="text/csv",
                 use_container_width=True,
             )
@@ -1998,6 +2018,12 @@ def main():
                                 if errors:
                                     st.error("Import failed:\n" + "\n".join(errors))
                                 else:
+                                    # Try to get project name from CSV
+                                    if "project name" in df.columns:
+                                        new_project_name = _safe_str(df["project name"].iloc[0])
+                                        if new_project_name:
+                                            new_scheduler.project_name = new_project_name
+                                            
                                     st.session_state.scheduler = new_scheduler
                                     st.session_state.calculated = False
                                     st.success(f"Imported {imported_count} activities.")
