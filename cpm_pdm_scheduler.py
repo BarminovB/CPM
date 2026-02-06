@@ -23,6 +23,9 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.patches import FancyBboxPatch
 import re
+import base64
+import io
+from datetime import datetime
 import plotly.express as px
 import plotly.graph_objects as go
 from typing import Tuple, List, Dict
@@ -546,6 +549,189 @@ def create_plotly_network(scheduler: PDMScheduler) -> go.Figure:
         font=dict(color=ACTIVE_THEME["ink"], family="Space Grotesk"),
     )
     return fig
+
+
+def _fig_to_base64(fig: plt.Figure) -> str:
+    buffer = io.BytesIO()
+    fig.savefig(buffer, format="png", dpi=180, bbox_inches="tight")
+    buffer.seek(0)
+    encoded = base64.b64encode(buffer.read()).decode("utf-8")
+    buffer.close()
+    return encoded
+
+
+def build_report_html(
+    scheduler: PDMScheduler,
+    results_df: pd.DataFrame,
+    theme: Dict[str, str],
+) -> str:
+    total_activities = len(scheduler.activities) if scheduler.activities else 0
+    critical_count = (
+        sum(1 for a in scheduler.activities.values() if a.is_critical)
+        if scheduler.activities
+        else 0
+    )
+    critical_paths = scheduler.critical_paths or []
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    network_fig = create_network_diagram(scheduler)
+    gantt_fig = create_gantt_chart(scheduler)
+    network_img = _fig_to_base64(network_fig)
+    gantt_img = _fig_to_base64(gantt_fig)
+    plt.close(network_fig)
+    plt.close(gantt_fig)
+
+    table_html = results_df.to_html(index=False, border=0)
+    log_text = "\n".join(scheduler.calculation_log)
+
+    critical_paths_html = (
+        "<ul>"
+        + "".join(f"<li>{' → '.join(path)}</li>" for path in critical_paths)
+        + "</ul>"
+        if critical_paths
+        else "<p>No critical path identified.</p>"
+    )
+
+    return f"""
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>CPM Studio Report</title>
+  <style>
+    :root {{
+      --bg: {theme["bg"]};
+      --surface: {theme["surface"]};
+      --ink: {theme["ink"]};
+      --muted: {theme["muted"]};
+      --border: {theme["border"]};
+      --accent: {theme["accent"]};
+    }}
+    body {{
+      font-family: "Space Grotesk", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      margin: 0;
+      padding: 24px;
+    }}
+    h1, h2, h3 {{
+      margin: 0 0 12px 0;
+    }}
+    .card {{
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 18px;
+      box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+    }}
+    .meta {{
+      color: var(--muted);
+      font-size: 12px;
+    }}
+    .kpi {{
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }}
+    .kpi div {{
+      background: rgba(255,255,255,0.8);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 14px;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }}
+    thead th {{
+      text-align: left;
+      background: #f4f2ee;
+      border-bottom: 1px solid var(--border);
+      padding: 8px;
+    }}
+    tbody td {{
+      border-bottom: 1px solid var(--border);
+      padding: 6px 8px;
+    }}
+    img {{
+      max-width: 100%;
+      height: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+    }}
+    pre {{
+      white-space: pre-wrap;
+      background: #f6f5f2;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 12px;
+      color: var(--ink);
+    }}
+    .formula {{
+      font-family: "Courier New", monospace;
+      background: #f6f5f2;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin: 6px 0;
+      font-size: 12px;
+    }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>CPM Studio Report</h1>
+    <div class="meta">Generated: {timestamp}</div>
+  </div>
+
+  <div class="card kpi">
+    <div><strong>Activities</strong><br>{total_activities}</div>
+    <div><strong>Project Duration</strong><br>{scheduler.project_duration} days</div>
+    <div><strong>Critical Activities</strong><br>{critical_count}</div>
+  </div>
+
+  <div class="card">
+    <h2>Critical Paths</h2>
+    {critical_paths_html}
+  </div>
+
+  <div class="card">
+    <h2>Formulas</h2>
+    <div class="formula">ES = max(Predecessor constraints, Start constraint)</div>
+    <div class="formula">EF = ES + Duration</div>
+    <div class="formula">LS = min(Successor constraints) - Duration</div>
+    <div class="formula">LF = LS + Duration</div>
+    <div class="formula">Total Float (TF) = LS - ES</div>
+    <div class="formula">Free Float (FF) = min(Successor ES/EF constraints) - Current ES/EF</div>
+  </div>
+
+  <div class="card">
+    <h2>Schedule Table</h2>
+    {table_html}
+  </div>
+
+  <div class="card">
+    <h2>Network Diagram</h2>
+    <img src="data:image/png;base64,{network_img}" alt="Network Diagram"/>
+  </div>
+
+  <div class="card">
+    <h2>Gantt Chart</h2>
+    <img src="data:image/png;base64,{gantt_img}" alt="Gantt Chart"/>
+  </div>
+
+  <div class="card">
+    <h2>Calculation Log</h2>
+    <pre>{log_text}</pre>
+  </div>
+</body>
+</html>
+"""
 
 
 def add_dependency_to_scheduler(
@@ -2291,12 +2477,35 @@ def main():
         st.plotly_chart(gantt_fig, use_container_width=True, key="gantt_overview")
         st.markdown("</div>", unsafe_allow_html=True)
 
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+        st.subheader("Report")
+        st.markdown("<div class='cpm-glass cpm-fade-in'>", unsafe_allow_html=True)
+        if st.button("Generate Report", type="primary", use_container_width=True):
+            st.session_state.report_html = build_report_html(
+                scheduler,
+                results_df,
+                ACTIVE_THEME,
+            )
+        if "report_html" in st.session_state:
+            st.download_button(
+                "Download Report (HTML)",
+                data=st.session_state.report_html.encode("utf-8"),
+                file_name="cpm_report.html",
+                mime="text/html",
+                use_container_width=True,
+            )
+            with st.expander("Report Preview", expanded=False):
+                st.components.v1.html(
+                    st.session_state.report_html,
+                    height=700,
+                    scrolling=True,
+                )
+            st.caption("Open the HTML and use your browser print dialog to export PDF.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(
             [
                 "Network Diagram",
                 "Gantt Chart",
-                "Interactive Gantt",
-                "Interactive Network",
                 "Graph Editor",
                 "Gantt Editor",
                 "Calculation Details",
@@ -2326,19 +2535,6 @@ def main():
             )
 
         with tab3:
-            st.subheader("Interactive Gantt Timeline")
-            fig = create_plotly_gantt(
-                scheduler,
-                scale=st.session_state.get("gantt_scale", "Day"),
-            )
-            st.plotly_chart(fig, use_container_width=True, key="gantt_tab_interactive")
-
-        with tab4:
-            st.subheader("Interactive Network Diagram")
-            fig = create_plotly_network(scheduler)
-            st.plotly_chart(fig, use_container_width=True, key="network_tab_interactive")
-
-        with tab5:
             st.subheader("Graph Editor")
             if scheduler.activities:
                 st.markdown("<div class='cpm-focus-trail'>", unsafe_allow_html=True)
@@ -2347,7 +2543,7 @@ def main():
             else:
                 st.info("Add activities first to edit dependencies.")
 
-        with tab6:
+        with tab4:
             st.subheader("Gantt Editor")
             if scheduler.activities:
                 st.markdown("<div class='cpm-focus-trail'>", unsafe_allow_html=True)
@@ -2356,7 +2552,7 @@ def main():
             else:
                 st.info("Add activities first to edit the schedule.")
 
-        with tab7:
+        with tab5:
             st.subheader("Detailed Calculation Log")
             log_text = "\n".join(scheduler.calculation_log)
             st.text_area("Calculation Steps", value=log_text, height=500, disabled=True)
