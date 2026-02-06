@@ -1373,6 +1373,14 @@ def main():
             border-radius: var(--cpm-radius-sm);
             overflow: hidden;
         }
+        [data-testid="stDataFrame"],
+        [data-testid="stDataEditor"] {
+            background: var(--cpm-surface);
+            border-radius: calc(var(--cpm-radius) + 2px);
+            border: 1px solid color-mix(in srgb, var(--cpm-border) 70%, transparent);
+            box-shadow: 0 16px 28px rgba(15, 23, 42, 0.10);
+            padding: 6px;
+        }
         [data-testid="stDataFrame"] tbody tr:hover td,
         [data-testid="stDataEditor"] tbody tr:hover td {
             background: color-mix(in srgb, var(--cpm-accent) 6%, var(--cpm-surface) 94%);
@@ -1797,7 +1805,9 @@ def main():
                     description = str(row.get("Description", "") or "")
                     owner = str(row.get("Owner", "") or "")
                     duration = int(row.get("Duration", 0) or 0)
-                    predecessors = str(row.get("Predecessors", "") or "")
+                    predecessors = str(row.get("Predecessors", "") or "").strip()
+                    if predecessors in {"-", "—"}:
+                        predecessors = ""
                     status = str(row.get("Status", "") or "").strip() or "Not Started"
                     progress = int(row.get("Progress", 0) or 0)
                     risk = str(row.get("Risk", "") or "").strip() or "Low"

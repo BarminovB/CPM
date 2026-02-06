@@ -635,7 +635,7 @@ class PDMScheduler:
         data = []
         for act_id in sorted(self.activities.keys()):
             act = self.activities[act_id]
-            pred_str = ";".join(str(p) for p in act.predecessors) if act.predecessors else "-"
+            pred_str = ";".join(str(p) for p in act.predecessors) if act.predecessors else ""
             data.append(
                 {
                     "ID": act_id,
